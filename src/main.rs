@@ -35,12 +35,11 @@ impl CPU {
             println!("stack : {:?}", self.stack);
 
             match (c, x, y, d) {
-                (0, 0, 0, 0) => {
-                    return;
-                }
+                (0, 0, 0, 0) => {return;}
                 (0, 0, 0xE, 0xE) => self.ret(),
                 (0x2, _, _, _) => self.call(nnn),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
+                (0x8, _, _, 0x5) => self.sub_xy(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -51,6 +50,20 @@ impl CPU {
         let args2 = self.registers[y as usize];
 
         let (val, overflow) = args1.overflowing_add(args2);
+        self.registers[x as usize] = val;
+
+        if overflow {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
+        }
+    }
+
+    fn sub_xy(&mut self,x:u8,y:u8){
+        let args1 = self.registers[x as usize];
+        let args2 = self.registers[y as usize];
+
+        let (val, overflow) = args1.overflowing_sub(args2);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -94,12 +107,15 @@ fn main() {
 
     cpu.registers[0] = 5;
     cpu.registers[1] = 10;
+    cpu.registers[2] = 45;
 
     let mem = &mut cpu.memory;
 
     mem[0x000] = 0x21;mem[0x001] = 0x00;
     mem[0x002] = 0x21;mem[0x003] = 0x00;
-    mem[0x004] = 0x00;mem[0x005] = 0x00;
+    mem[0x004] = 0x80;mem[0x005] = 0x25;
+    mem[0x006] = 0x00;mem[0x007] = 0x00;
+
 
     mem[0x100] = 0x80;mem[0x101] = 0x14;
     mem[0x102] = 0x80;mem[0x103] = 0x14;
@@ -110,6 +126,5 @@ fn main() {
 
     cpu.run();
 
-    assert_eq!(cpu.registers[0], 45);
-    println!("5 + (10 * 2) + (10 * 2)  = {}", cpu.registers[0]);
+    println!("5 + (10 * 2) + (10 * 2) - 45  = {}", cpu.registers[0]);
 }
