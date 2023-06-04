@@ -6,7 +6,8 @@ struct CPU {
     memory: [u8; 0x1000],
     stack: [u16; 16],
     stack_pointer: usize,
-    index_register: u16,    
+    index_register: u16, 
+    delay_timer: u8,
 }
 
 impl CPU {
@@ -246,28 +247,56 @@ impl CPU {
     }
 
     fn drw_xy(&mut self, x: u8, y: u8, n: u8) {
-        let x = self.registers[x as usize];
-        let y = self.registers[y as usize];
-        let height = n;
+        todo!("Implement this")
+    }
 
-        self.registers[0xF] = 0;
+    fn skp_vx(&mut self, x: u8) {
+        todo!("Implement this")
+    }
 
-        for yline in 0..height {
-            let pixel = self.memory[(self.index_register + yline as u16) as usize];
-            for xline in 0..8 {
-                if (pixel & (0x80 >> xline)) != 0 {
-                    let x = x as usize + xline;
-                    let y = y as usize + yline;
+    fn sknp_vx(&mut self, x: u8) {
+        todo!("Implement this")
+    }
 
-                    let index = x + (y * 64);
+    fn ld_vx_dt(&mut self, x: u8) {
+        todo!("Implement this")
+    }
 
-                    if self.gfx[index] == 1 {
-                        self.registers[0xF] = 1;
-                    }
+    fn ld_vx_k(&mut self, x: u8) {
+        todo!("Implement this")
+    }
 
-                    self.gfx[index] ^= 1;
-                }
-            }
+    fn ld_dt_vx(&mut self, x: u8) {
+        todo!("Implement this")
+    }
+
+    fn ld_st_vx(&mut self, x: u8) {
+        todo!("Implement this")
+    }
+
+    fn add_i_vx(&mut self, x: u8) {
+        self.index_register += self.registers[x as usize] as u16;
+    }
+
+    fn ld_f_vx(&mut self, x: u8) {
+        todo!("Implement this")
+    }
+
+    fn ld_b_vx(&mut self, x: u8) {
+        self.memory[self.index_register as usize] = self.registers[x as usize] / 100;
+        self.memory[self.index_register as usize + 1] = (self.registers[x as usize] / 10) % 10;
+        self.memory[self.index_register as usize + 2] = (self.registers[x as usize] % 100) % 10;
+    }
+
+    fn ld_i_vx(&mut self, x: u8) {
+        for i in 0..=x {
+            self.memory[self.index_register as usize + i as usize] = self.registers[i as usize];
+        }
+    }
+
+    fn ld_vx_i(&mut self, x: u8) {
+        for i in 0..=x {
+            self.registers[i as usize] = self.memory[self.index_register as usize + i as usize];
         }
     }
 }
@@ -279,6 +308,8 @@ fn main() {
         memory: [0; 0x1000],
         stack: [0; 16],
         stack_pointer: 0,
+        index_register: 0,
+        delay_timer: 0,
     };
 
     cpu.registers[0] = 5;
