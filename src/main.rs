@@ -259,7 +259,7 @@ impl CPU {
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
-        todo!("Implement this")
+        self.registers[x as usize] = self.delay_timer;
     }
 
     fn ld_vx_k(&mut self, x: u8) {
@@ -267,7 +267,7 @@ impl CPU {
     }
 
     fn ld_dt_vx(&mut self, x: u8) {
-        todo!("Implement this")
+        self.delay_timer = self.registers[x as usize];
     }
 
     fn ld_st_vx(&mut self, x: u8) {
