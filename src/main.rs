@@ -329,7 +329,6 @@ fn main() {
     mem[0x104] = 0x00;mem[0x105] = 0xEE;
 
     println!("registers: {:?}", cpu.registers);
-    //println!("memory: {:?}",cpu.memory);
 
     cpu.run();
 
