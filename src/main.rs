@@ -1,4 +1,7 @@
 use rand::Rng;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 struct CPU {
     registers: [u8; 16],
@@ -11,6 +14,28 @@ struct CPU {
 }
 
 impl CPU {
+    fn new(file_path: &str) -> CPU {
+        let mut cpu = CPU {
+            registers: [0; 16],
+            position_in_memory: 0x200,
+            memory: [0; 0x1000],
+            stack: [0; 16],
+            stack_pointer: 0,
+            index_register: 0,
+            delay_timer: 0,
+        };
+
+        let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
+        let mut buffer: Vec<u8> = Vec::new();
+        file.read_to_end(&mut buffer).expect("Failed to read the file");
+
+        for (i, byte) in buffer.iter().enumerate() {
+            cpu.memory[0x200 + i] = *byte;
+        }
+
+        cpu
+    }
+
     fn read_opcode(&self) -> u16 {
         let p = self.position_in_memory;
         let op_byte_1 = self.memory[p] as u16;
@@ -30,14 +55,6 @@ impl CPU {
 
             let nnn = opcode & 0x0FFF;
             let kk = opcode & 0x00FF;
-
-            println!(
-                "mem: {:0x} c: {:0x}, x: {:0x}, y: {:0x}, d: {:0x}",
-                self.position_in_memory, c, x, y, d
-            );
-            println!("register : {} , {}", self.registers[0], self.registers[1]);
-            println!("stack_pointer : {}", self.stack_pointer);
-            println!("stack : {:?}", self.stack);
 
             match (c, x, y, d) {
                 (0, 0, 0, 0) => {return;}
@@ -302,35 +319,6 @@ impl CPU {
 }
 
 fn main() {
-    let mut cpu = CPU {
-        registers: [0; 16],
-        position_in_memory: 0,
-        memory: [0; 0x1000],
-        stack: [0; 16],
-        stack_pointer: 0,
-        index_register: 0,
-        delay_timer: 0,
-    };
-
-    cpu.registers[0] = 5;
-    cpu.registers[1] = 10;
-    cpu.registers[2] = 45;
-
-    let mem = &mut cpu.memory;
-
-    mem[0x000] = 0x21;mem[0x001] = 0x00;
-    mem[0x002] = 0x21;mem[0x003] = 0x00;
-    mem[0x004] = 0x80;mem[0x005] = 0x25;
-    mem[0x006] = 0x00;mem[0x007] = 0x00;
-
-
-    mem[0x100] = 0x80;mem[0x101] = 0x14;
-    mem[0x102] = 0x80;mem[0x103] = 0x14;
-    mem[0x104] = 0x00;mem[0x105] = 0xEE;
-
-    println!("registers: {:?}", cpu.registers);
-
+    let mut cpu = CPU::new("tetris.ch8");
     cpu.run();
-
-    println!("5 + (10 * 2) + (10 * 2) - 45  = {}", cpu.registers[0]);
 }
