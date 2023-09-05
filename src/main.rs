@@ -68,10 +68,6 @@ impl Cpu {
             );
 
             match (c, x, y, d) {
-                (0, _, _, _) => {
-                    println!("Executing function: sys_addr");
-                    self.sys_addr(nnn);
-                }
                 (0, 0, 0xE, 0) => {
                     println!("Executing function: cls");
                     self.cls();
@@ -79,6 +75,10 @@ impl Cpu {
                 (0, 0, 0xE, 0xE) => {
                     println!("Executing function: ret");
                     self.ret();
+                }
+                (0, _, _, _) => {
+                    println!("Executing function: sys_addr");
+                    self.sys_addr(nnn);
                 }
                 (0x1, _, _, _) => {
                     println!("Executing function: jp_addr");
@@ -216,8 +216,8 @@ impl Cpu {
         }
     }
 
-    fn sys_addr(&mut self, addr: u16) {
-        self.position_in_memory = addr as usize;
+    fn sys_addr(&mut self, nnn: u16) {
+        self.position_in_memory = nnn as usize;
     }
 
     fn cls(&mut self) {
@@ -233,11 +233,11 @@ impl Cpu {
         self.position_in_memory = self.stack[self.stack_pointer] as usize;
     }
 
-    fn jp_addr(&mut self, addr: u16) {
-        self.position_in_memory = addr as usize;
+    fn jp_addr(&mut self, nnn: u16) {
+        self.position_in_memory = nnn as usize;
     }
 
-    fn call(&mut self, addr: u16) {
+    fn call(&mut self, nnn: u16) {
         let sp = self.stack_pointer;
         let stack = &mut self.stack;
 
@@ -247,17 +247,17 @@ impl Cpu {
 
         stack[sp] = self.position_in_memory as u16;
         self.stack_pointer += 1;
-        self.position_in_memory = addr as usize;
+        self.position_in_memory = nnn as usize;
     }
 
-    fn se_byte(&mut self, x: u8, byte: u8) {
-        if self.registers[x as usize] == byte {
+    fn se_byte(&mut self, x: u8, kk: u8) {
+        if self.registers[x as usize] == kk {
             self.position_in_memory += 2;
         }
     }
 
-    fn sne_byte(&mut self, x: u8, byte: u8) {
-        if self.registers[x as usize] != byte {
+    fn sne_byte(&mut self, x: u8, kk: u8) {
+        if self.registers[x as usize] != kk {
             self.position_in_memory += 2;
         }
     }
@@ -268,13 +268,13 @@ impl Cpu {
         }
     }
 
-    fn ld_byte(&mut self, x: u8, byte: u8) {
-        self.registers[x as usize] = byte;
+    fn ld_byte(&mut self, x: u8, kk: u8) {
+        self.registers[x as usize] = kk;
     }
 
-    fn add_byte(&mut self, x: u8, byte: u8) {
-        let args1 = self.registers[x as usize];
-        let (val, overflow) = args1.overflowing_add(byte);
+    fn add_byte(&mut self, x: u8, kk: u8) {
+        let vx = self.registers[x as usize];
+        let (val, overflow) = vx.overflowing_add(kk);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -301,10 +301,10 @@ impl Cpu {
     }
 
     fn add_xy(&mut self, x: u8, y: u8) {
-        let args1 = self.registers[x as usize];
-        let args2 = self.registers[y as usize];
+        let vx = self.registers[x as usize];
+        let vy = self.registers[y as usize];
 
-        let (val, overflow) = args1.overflowing_add(args2);
+        let (val, overflow) = vx.overflowing_add(vy);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -315,10 +315,10 @@ impl Cpu {
     }
 
     fn sub_xy(&mut self, x: u8, y: u8) {
-        let args1 = self.registers[x as usize];
-        let args2 = self.registers[y as usize];
+        let vx = self.registers[x as usize];
+        let vy = self.registers[y as usize];
 
-        let (val, overflow) = args1.overflowing_sub(args2);
+        let (val, overflow) = vx.overflowing_sub(vy);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -329,8 +329,8 @@ impl Cpu {
     }
 
     fn shr_xy(&mut self, x: u8) {
-        let args1 = self.registers[x as usize];
-        let (val, overflow) = args1.overflowing_shr(1);
+        let vx = self.registers[x as usize];
+        let (val, overflow) = vx.overflowing_shr(1);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -341,10 +341,10 @@ impl Cpu {
     }
 
     fn subn_xy(&mut self, x: u8, y: u8) {
-        let args1 = self.registers[x as usize];
-        let args2 = self.registers[y as usize];
+        let vx = self.registers[x as usize];
+        let vy = self.registers[y as usize];
 
-        let (val, overflow) = args2.overflowing_sub(args1);
+        let (val, overflow) = vy.overflowing_sub(vx);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -355,8 +355,8 @@ impl Cpu {
     }
 
     fn shl_xy(&mut self, x: u8) {
-        let args1 = self.registers[x as usize];
-        let (val, overflow) = args1.overflowing_shl(1);
+        let vx = self.registers[x as usize];
+        let (val, overflow) = vx.overflowing_shl(1);
         self.registers[x as usize] = val;
 
         if overflow {
@@ -372,40 +372,41 @@ impl Cpu {
         }
     }
 
-    fn ld_i_addr(&mut self, addr: u16) {
-        self.index_register = addr;
+    fn ld_i_addr(&mut self, nnn: u16) {
+        self.index_register = nnn;
     }
 
-    fn jp_v0_addr(&mut self, addr: u16) {
-        self.position_in_memory = (self.registers[0] as u16 + addr) as usize;
+    fn jp_v0_addr(&mut self, nnn: u16) {
+        self.position_in_memory = (self.registers[0] as u16 + nnn) as usize;
     }
 
-    fn rnd_byte(&mut self, x: u8, byte: u8) {
+    fn rnd_byte(&mut self, x: u8, kk: u8) {
         let mut rng = rand::thread_rng();
         let random_number: u8 = rng.gen();
-        self.registers[x as usize] = random_number & byte;
+        self.registers[x as usize] = random_number & kk;
     }
 
     fn drw_xy(&mut self, x: u8, y: u8, n: u8) {
-        let x = self.registers[x as usize] as usize;
-        let y = self.registers[y as usize] as usize;
-
+        let vx = self.registers[x as usize] as usize;
+        let vy = self.registers[y as usize] as usize;
+    
         self.registers[0xF] = 0;
-
-        for byte in 0..n {
-            let byte = self.memory[self.index_register as usize + byte as usize];
-            for bit in 0..8 {
-                let bit = (byte >> (7 - bit)) & 1;
-                let x = (x + bit as usize) % DISPLAY_WIDTH;
-                let y = (y + byte as usize) % DISPLAY_HEIGHT;
-                let prev = self.display[y][x];
-                self.display[y][x] ^= bit == 1;
-                if prev && !self.display[y][x] {
+    
+        for byte_offset in 0..n {
+            let byte = self.memory[self.index_register as usize + byte_offset as usize];
+            for bit_offset in 0..8 {
+                let bit = (byte >> (7 - bit_offset)) & 1;
+                let curr_x = (vx + bit_offset) % DISPLAY_WIDTH;
+                let curr_y = (vy + byte_offset as usize) % DISPLAY_HEIGHT;
+                let prev = self.display[curr_y][curr_x];
+                self.display[curr_y][curr_x] ^= bit == 1;
+                if prev && !self.display[curr_y][curr_x] {
                     self.registers[0xF] = 1;
                 }
             }
         }
     }
+    
 
     fn skp_vx(&mut self, x: u8) {
         todo!("Implement this")
