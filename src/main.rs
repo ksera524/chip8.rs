@@ -6,7 +6,7 @@ use std::path::Path;
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
 
-struct CPU {
+struct Cpu {
     registers: [u8; 16],
     position_in_memory: usize, //program counter
     memory: [u8; 0x1000],
@@ -17,9 +17,9 @@ struct CPU {
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
 }
 
-impl CPU {
-    fn new(file_path: &str) -> CPU {
-        let mut cpu = CPU {
+impl Cpu {
+    fn new(file_path: &str) -> Cpu {
+        let mut cpu = Cpu {
             registers: [0; 16],
             position_in_memory: 0x200,
             memory: [0; 0x1000],
@@ -68,10 +68,6 @@ impl CPU {
             );
 
             match (c, x, y, d) {
-                (0, 0, 0, 0) => {
-                    println!("Executing function: return");
-                    return;
-                }
                 (0, _, _, _) => {
                     println!("Executing function: sys_addr");
                     self.sys_addr(nnn);
@@ -463,6 +459,6 @@ impl CPU {
 }
 
 fn main() {
-    let mut cpu = CPU::new("tetris.ch8");
+    let mut cpu = Cpu::new("tetris.ch8");
     cpu.run();
 }
