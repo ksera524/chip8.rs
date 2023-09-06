@@ -5,6 +5,8 @@ use simplelog::*;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
@@ -54,6 +56,7 @@ impl Cpu {
 
     fn render_display(&self) {
         println!("\x1b[2J\x1b[H\x1b[?25l");
+        println!("\x1b[H");
         for row in &self.display {
             for &pixel in row {
                 if pixel {
@@ -64,6 +67,7 @@ impl Cpu {
             }
             println!();
         }
+        println!("\x1b[?25h");
     }
 
     fn run(&mut self) {
@@ -197,6 +201,7 @@ impl Cpu {
                     todo!("opcode {:04x}", opcode);
                 }
             }
+            thread::sleep(Duration::from_millis(16));
         }
     }
 
