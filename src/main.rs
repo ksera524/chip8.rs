@@ -52,8 +52,23 @@ impl Cpu {
         op_byte_1 << 8 | op_byte_2
     }
 
+    fn render_display(&self) {
+        println!("\x1b[2J\x1b[H\x1b[?25l");
+        for row in &self.display {
+            for &pixel in row {
+                if pixel {
+                    print!("#");
+                } else {
+                    print!(" ");
+                }
+            }
+            println!();
+        }
+    }
+
     fn run(&mut self) {
         loop {
+            self.render_display();
             let opcode = self.read_opcode();
             self.position_in_memory += 2;
 
