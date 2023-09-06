@@ -10,6 +10,24 @@ use std::time::Duration;
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
+const FONTSET: [u8; 80] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
 
 struct Cpu {
     registers: [u8; 16],
@@ -40,6 +58,10 @@ impl Cpu {
         file.read_to_end(&mut buffer)
             .expect("Failed to read the file");
 
+        for (i, byte) in FONTSET.iter().enumerate() {
+            cpu.memory[i] = *byte;
+        }
+
         for (i, byte) in buffer.iter().enumerate() {
             cpu.memory[0x200 + i] = *byte;
         }
@@ -67,7 +89,6 @@ impl Cpu {
             }
             println!();
         }
-        println!("\x1b[?25h");
     }
 
     fn run(&mut self) {
@@ -201,6 +222,7 @@ impl Cpu {
                     todo!("opcode {:04x}", opcode);
                 }
             }
+            println!("\x1b[?25h");
             thread::sleep(Duration::from_millis(16));
         }
     }
@@ -422,12 +444,10 @@ impl Cpu {
 
     fn skp_vx(&mut self, x: u8) {
         info!("Executing function: skp_vx");
-        todo!("Implement this")
     }
 
     fn sknp_vx(&mut self, x: u8) {
         info!("Executing function: sknp_vx");
-        todo!("Implement this")
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
@@ -498,6 +518,6 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let mut cpu = Cpu::new("tetris.ch8");
+    let mut cpu = Cpu::new("Space Invaders [David Winter].ch8");
     cpu.run();
 }
