@@ -6,7 +6,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::thread;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use getch_rs::{Getch, Key};
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
@@ -38,6 +40,8 @@ struct Cpu {
     index_register: u16,
     delay_timer: u8,
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
+    sound_timer: u8,
+    key: [bool; 16],
 }
 
 impl Cpu {
@@ -50,7 +54,9 @@ impl Cpu {
             stack_pointer: 0,
             index_register: 0,
             delay_timer: 0,
+            sound_timer: 0,
             display: [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
+            key: [false; 16],
         };
 
         let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
@@ -77,6 +83,66 @@ impl Cpu {
         op_byte_1 << 8 | op_byte_2
     }
 
+    fn read_keyboard_input(&mut self)  {
+        info!("Executing function: read_keyboard_input");
+        let g = Getch::new();
+            match g.getch() {
+                Ok(Key::Char('1')) => {
+                    self.key[0x1] = true;
+                }
+                Ok(Key::Char('2')) => {
+                    self.key[0x2] = true;
+                }
+                Ok(Key::Char('3')) => {
+                    self.key[0x3] = true;
+                }
+                Ok(Key::Char('4')) => {
+                    self.key[0xC] = true;
+                }
+                Ok(Key::Char('q')) => {
+                    self.key[0x4] = true;
+                }
+                Ok(Key::Char('w')) => {
+                    self.key[0x5] = true;
+                }
+                Ok(Key::Char('e')) => {
+                    self.key[0x6] = true;
+                }
+                Ok(Key::Char('r')) => {
+                    self.key[0xD] = true;
+                }
+                Ok(Key::Char('a')) => {
+                    self.key[0x7] = true;
+                }
+                Ok(Key::Char('s')) => {
+                    self.key[0x8] = true;
+                }
+                Ok(Key::Char('d')) => {
+                    self.key[0x9] = true;
+                }
+                Ok(Key::Char('f')) => {
+                    self.key[0xE] = true;
+                }
+                Ok(Key::Char('z')) => {
+                    self.key[0xA] = true;
+                }
+                Ok(Key::Char('x')) => {
+                    self.key[0x0] = true;
+                }
+                Ok(Key::Char('c')) => {
+                    self.key[0xB] = true;
+                }
+                Ok(Key::Char('v')) => {
+                    self.key[0xF] = true;
+                }
+                Ok(Key::Esc) => {
+                    std::process::exit(0);
+                }
+                _ => {}
+            }
+        
+    }
+
     fn render_display(&self) {
         println!("\x1b[2J\x1b[H\x1b[?25l");
         println!("\x1b[H");
@@ -89,6 +155,16 @@ impl Cpu {
                 }
             }
             println!();
+        }
+    }
+
+    fn decrement_timers(&mut self) {
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
         }
     }
 
@@ -110,6 +186,15 @@ impl Cpu {
                 "opcode: {:04x} c: {:01x} x: {:01x} y: {:01x} d: {:01x} nnn: {:03x} kk: {:02x}",
                 opcode, c, x, y, d, nnn, kk
             );
+            info!(
+                "registers: {:02x?} position_in_memory: {:04x} index_register: {:04x} stack_pointer: {:02x}",
+                self.registers, self.position_in_memory, self.index_register, self.stack_pointer
+            );
+            info!(
+                "stack: {:04x?} delay_timer: {:02x} sound_timer: {:02x}",
+                self.stack, self.delay_timer, self.sound_timer
+            );
+            info!("key: {:02x?}", self.key);
 
             match (c, x, y, d) {
                 (0, 0, 0xE, 0) => {
@@ -223,6 +308,7 @@ impl Cpu {
                     todo!("opcode {:04x}", opcode);
                 }
             }
+            //self.key = [false; 16];
             println!("\x1b[?25h");
             thread::sleep(Duration::from_millis(16));
         }
@@ -445,10 +531,16 @@ impl Cpu {
 
     fn skp_vx(&mut self, x: u8) {
         info!("Executing function: skp_vx");
+        if(self.key[self.registers[x as usize] as usize]) {
+            self.position_in_memory += 2;
+        }
     }
 
     fn sknp_vx(&mut self, x: u8) {
         info!("Executing function: sknp_vx");
+        if(!self.key[self.registers[x as usize] as usize]) {
+            self.position_in_memory += 2;
+        }
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
@@ -457,7 +549,13 @@ impl Cpu {
 
     fn ld_vx_k(&mut self, x: u8) {
         info!("Executing function: ld_vx_k");
-        todo!("Implement this")
+        self.read_keyboard_input();
+        for i in 0..16 {
+            if self.key[i] {
+                self.registers[x as usize] = i as u8;
+                return;
+            }
+        }
     }
 
     fn ld_dt_vx(&mut self, x: u8) {
@@ -467,7 +565,7 @@ impl Cpu {
 
     fn ld_st_vx(&mut self, x: u8) {
         info!("Executing function: ld_st_vx");
-        todo!("Implement this")
+        self.sound_timer = self.registers[x as usize];
     }
 
     fn add_i_vx(&mut self, x: u8) {
@@ -519,6 +617,43 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let mut cpu = Cpu::new("rom/15 Puzzle [Roger Ivie].ch8");
-    cpu.run();
+    let cpu = Arc::new(Mutex::new(Cpu::new("rom/Space Invaders [David Winter] (alt).ch8")));
+
+    let cpu_clone_for_run = cpu.clone();
+    let handle_for_run = thread::spawn(move || {
+        info!("Executing function: run");
+        let mut cpu = cpu_clone_for_run.lock().unwrap();
+        info!("Lock acquired for run");
+        cpu.run();
+    });
+
+    let cpu_clone_for_decrement_timers = cpu.clone();
+    let handle_for_decrement_timers = thread::spawn(move || {
+        loop {
+            {
+                info!("Executing function: decrement_timers");
+                let mut cpu = cpu_clone_for_decrement_timers.lock().unwrap();
+                info!("Lock acquired for decrement_timers");
+                cpu.decrement_timers();
+            }
+            thread::sleep(Duration::from_millis(1000 / 60)); // 60Hz
+        }
+    });
+
+    let cpu_clone_for_read_keyboard_input = cpu.clone();
+    let handle_for_read_keyboard_input = thread::spawn(move || {
+        loop {
+            {
+                info!("Executing function: read_keyboard_input");
+                let mut cpu = cpu_clone_for_read_keyboard_input.lock().unwrap();
+                info!("Lock acquired for read_keyboard_input");
+                cpu.read_keyboard_input();
+            }
+            thread::sleep(Duration::from_millis(1000 / 60)); // 60Hz
+        }
+    });
+
+    handle_for_run.join().unwrap();
+    handle_for_decrement_timers.join().unwrap();
+    handle_for_read_keyboard_input.join().unwrap();
 }
