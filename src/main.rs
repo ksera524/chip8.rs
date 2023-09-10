@@ -56,7 +56,8 @@ impl Cpu {
         let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
         let mut buffer: Vec<u8> = Vec::new();
         file.read_to_end(&mut buffer)
-            .expect("Failed to read the file");
+            .expect(
+                "Failed to read the file");
 
         for (i, byte) in FONTSET.iter().enumerate() {
             cpu.memory[i] = *byte;
@@ -518,6 +519,6 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let mut cpu = Cpu::new("Space Invaders [David Winter].ch8");
+    let mut cpu = Cpu::new("rom/15 Puzzle [Roger Ivie].ch8");
     cpu.run();
 }
