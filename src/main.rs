@@ -1,3 +1,4 @@
+use getch_rs::{Getch, Key};
 use log::{info, warn};
 use rand::Rng;
 use simplelog::LevelFilter;
@@ -5,10 +6,9 @@ use simplelog::*;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::thread;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
-use getch_rs::{Getch, Key};
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
@@ -62,8 +62,7 @@ impl Cpu {
         let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
         let mut buffer: Vec<u8> = Vec::new();
         file.read_to_end(&mut buffer)
-            .expect(
-                "Failed to read the file");
+            .expect("Failed to read the file");
 
         for (i, byte) in FONTSET.iter().enumerate() {
             cpu.memory[i] = *byte;
@@ -83,64 +82,63 @@ impl Cpu {
         op_byte_1 << 8 | op_byte_2
     }
 
-    fn read_keyboard_input(&mut self)  {
+    fn read_keyboard_input(&mut self) {
         info!("Executing function: read_keyboard_input");
         let g = Getch::new();
-            match g.getch() {
-                Ok(Key::Char('1')) => {
-                    self.key[0x1] = true;
-                }
-                Ok(Key::Char('2')) => {
-                    self.key[0x2] = true;
-                }
-                Ok(Key::Char('3')) => {
-                    self.key[0x3] = true;
-                }
-                Ok(Key::Char('4')) => {
-                    self.key[0xC] = true;
-                }
-                Ok(Key::Char('q')) => {
-                    self.key[0x4] = true;
-                }
-                Ok(Key::Char('w')) => {
-                    self.key[0x5] = true;
-                }
-                Ok(Key::Char('e')) => {
-                    self.key[0x6] = true;
-                }
-                Ok(Key::Char('r')) => {
-                    self.key[0xD] = true;
-                }
-                Ok(Key::Char('a')) => {
-                    self.key[0x7] = true;
-                }
-                Ok(Key::Char('s')) => {
-                    self.key[0x8] = true;
-                }
-                Ok(Key::Char('d')) => {
-                    self.key[0x9] = true;
-                }
-                Ok(Key::Char('f')) => {
-                    self.key[0xE] = true;
-                }
-                Ok(Key::Char('z')) => {
-                    self.key[0xA] = true;
-                }
-                Ok(Key::Char('x')) => {
-                    self.key[0x0] = true;
-                }
-                Ok(Key::Char('c')) => {
-                    self.key[0xB] = true;
-                }
-                Ok(Key::Char('v')) => {
-                    self.key[0xF] = true;
-                }
-                Ok(Key::Esc) => {
-                    std::process::exit(0);
-                }
-                _ => {}
+        match g.getch() {
+            Ok(Key::Char('1')) => {
+                self.key[0x1] = true;
             }
-        
+            Ok(Key::Char('2')) => {
+                self.key[0x2] = true;
+            }
+            Ok(Key::Char('3')) => {
+                self.key[0x3] = true;
+            }
+            Ok(Key::Char('4')) => {
+                self.key[0xC] = true;
+            }
+            Ok(Key::Char('q')) => {
+                self.key[0x4] = true;
+            }
+            Ok(Key::Char('w')) => {
+                self.key[0x5] = true;
+            }
+            Ok(Key::Char('e')) => {
+                self.key[0x6] = true;
+            }
+            Ok(Key::Char('r')) => {
+                self.key[0xD] = true;
+            }
+            Ok(Key::Char('a')) => {
+                self.key[0x7] = true;
+            }
+            Ok(Key::Char('s')) => {
+                self.key[0x8] = true;
+            }
+            Ok(Key::Char('d')) => {
+                self.key[0x9] = true;
+            }
+            Ok(Key::Char('f')) => {
+                self.key[0xE] = true;
+            }
+            Ok(Key::Char('z')) => {
+                self.key[0xA] = true;
+            }
+            Ok(Key::Char('x')) => {
+                self.key[0x0] = true;
+            }
+            Ok(Key::Char('c')) => {
+                self.key[0xB] = true;
+            }
+            Ok(Key::Char('v')) => {
+                self.key[0xF] = true;
+            }
+            Ok(Key::Esc) => {
+                std::process::exit(0);
+            }
+            _ => {}
+        }
     }
 
     fn render_display(&self) {
@@ -169,149 +167,146 @@ impl Cpu {
     }
 
     fn run(&mut self) {
-        loop {
-            self.render_display();
-            let opcode = self.read_opcode();
-            self.position_in_memory += 2;
+        self.render_display();
+        let opcode = self.read_opcode();
+        self.position_in_memory += 2;
 
-            let c = ((opcode & 0xF000) >> 12) as u8;
-            let x = ((opcode & 0x0F00) >> 8) as u8;
-            let y = ((opcode & 0x00F0) >> 4) as u8;
-            let d = ((opcode & 0x000F) >> 0) as u8;
+        let c = ((opcode & 0xF000) >> 12) as u8;
+        let x = ((opcode & 0x0F00) >> 8) as u8;
+        let y = ((opcode & 0x00F0) >> 4) as u8;
+        let d = ((opcode & 0x000F) >> 0) as u8;
 
-            let nnn = opcode & 0x0FFF;
-            let kk = opcode & 0x00FF;
+        let nnn = opcode & 0x0FFF;
+        let kk:u8 = (opcode & 0x00FF) as u8;
 
-            info!(
-                "opcode: {:04x} c: {:01x} x: {:01x} y: {:01x} d: {:01x} nnn: {:03x} kk: {:02x}",
-                opcode, c, x, y, d, nnn, kk
-            );
-            info!(
+        /* 
+        info!(
+            "opcode: {:04x} c: {:01x} x: {:01x} y: {:01x} d: {:01x} nnn: {:03x} kk: {:02x}",
+            opcode, c, x, y, d, nnn, kk
+        );
+        info!(
                 "registers: {:02x?} position_in_memory: {:04x} index_register: {:04x} stack_pointer: {:02x}",
                 self.registers, self.position_in_memory, self.index_register, self.stack_pointer
             );
-            info!(
-                "stack: {:04x?} delay_timer: {:02x} sound_timer: {:02x}",
-                self.stack, self.delay_timer, self.sound_timer
-            );
-            info!("key: {:02x?}", self.key);
+        info!(
+            "stack: {:04x?} delay_timer: {:02x} sound_timer: {:02x}",
+            self.stack, self.delay_timer, self.sound_timer
+        );
+        info!("key: {:02x?}", self.key);
+        */
 
-            match (c, x, y, d) {
-                (0, 0, 0xE, 0) => {
-                    self.cls();
-                }
-                (0, 0, 0xE, 0xE) => {
-                    self.ret();
-                }
-                (0, _, _, _) => {
-                    self.sys_addr(nnn);
-                }
-                (0x1, _, _, _) => {
-                    self.jp_addr(nnn);
-                }
-                (0x2, _, _, _) => {
-                    self.call(nnn);
-                }
-                (0x3, _, _, _) => {
-                    self.se_byte(x, kk as u8);
-                }
-                (0x4, _, _, _) => {
-                    self.sne_byte(x, kk as u8);
-                }
-                (0x5, _, _, 0) => {
-                    self.se_xy(x, y);
-                }
-                (0x6, _, _, _) => {
-                    self.ld_byte(x, kk as u8);
-                }
-                (0x7, _, _, _) => {
-                    self.add_byte(x, kk as u8);
-                }
-                (0x8, _, _, 0) => {
-                    self.ld_xy(x, y);
-                }
-                (0x8, _, _, 1) => {
-                    self.or_xy(x, y);
-                }
-                (0x8, _, _, 2) => {
-                    self.and_xy(x, y);
-                }
-                (0x8, _, _, 3) => {
-                    self.xor_xy(x, y);
-                }
-                (0x8, _, _, 4) => {
-                    self.add_xy(x, y);
-                }
-                (0x8, _, _, 5) => {
-                    self.sub_xy(x, y);
-                }
-                (0x8, _, _, 6) => {
-                    self.shr_xy(x);
-                }
-                (0x8, _, _, 7) => {
-                    self.subn_xy(x, y);
-                }
-                (0x8, _, _, 0xE) => {
-                    self.shl_xy(x);
-                }
-                (0x9, _, _, 0) => {
-                    self.sne_xy(x, y);
-                }
-                (0xA, _, _, _) => {
-                    self.ld_i_addr(nnn);
-                }
-                (0xB, _, _, _) => {
-                    self.jp_v0_addr(nnn);
-                }
-                (0xC, _, _, _) => {
-                    self.rnd_byte(x, kk as u8);
-                }
-                (0xD, _, _, _) => {
-                    self.drw_xy(x, y, d);
-                }
-                (0xE, _, 9, 0xE) => {
-                    self.skp_vx(x);
-                }
-                (0xE, _, 0xA, 1) => {
-                    self.sknp_vx(x);
-                }
-                (0xF, _, 0, 7) => {
-                    info!("Executing function: ld_vx_dt");
-                    self.ld_vx_dt(x);
-                }
-                (0xF, _, 0, 0xA) => {
-                    self.ld_vx_k(x);
-                }
-                (0xF, _, 1, 5) => {
-                    self.ld_dt_vx(x);
-                }
-                (0xF, _, 1, 8) => {
-                    self.ld_st_vx(x);
-                }
-                (0xF, _, 1, 0xE) => {
-                    self.add_i_vx(x);
-                }
-                (0xF, _, 2, 9) => {
-                    self.ld_f_vx(x);
-                }
-                (0xF, _, 3, 3) => {
-                    self.ld_b_vx(x);
-                }
-                (0xF, _, 5, 5) => {
-                    self.ld_i_vx(x);
-                }
-                (0xF, _, 6, 5) => {
-                    self.ld_vx_i(x);
-                }
-                _ => {
-                    warn!("Executing unknown opcode");
-                    todo!("opcode {:04x}", opcode);
-                }
+        match (c, x, y, d) {
+            (0, 0, 0xE, 0) => {
+                self.cls();
             }
-            //self.key = [false; 16];
-            println!("\x1b[?25h");
-            thread::sleep(Duration::from_millis(16));
+            (0, 0, 0xE, 0xE) => {
+                self.ret();
+            }
+            (0, _, _, _) => {
+                self.sys_addr(nnn);
+            }
+            (0x1, _, _, _) => {
+                self.jp_addr(nnn);
+            }
+            (0x2, _, _, _) => {
+                self.call(nnn);
+            }
+            (0x3, _, _, _) => {
+                self.se_byte(x, kk);
+            }
+            (0x4, _, _, _) => {
+                self.sne_byte(x, kk);
+            }
+            (0x5, _, _, 0) => {
+                self.se_xy(x, y);
+            }
+            (0x6, _, _, _) => {
+                self.ld_byte(x, kk);
+            }
+            (0x7, _, _, _) => {
+                self.add_byte(x, kk);
+            }
+            (0x8, _, _, 0) => {
+                self.ld_xy(x, y);
+            }
+            (0x8, _, _, 1) => {
+                self.or_xy(x, y);
+            }
+            (0x8, _, _, 2) => {
+                self.and_xy(x, y);
+            }
+            (0x8, _, _, 3) => {
+                self.xor_xy(x, y);
+            }
+            (0x8, _, _, 4) => {
+                self.add_xy(x, y);
+            }
+            (0x8, _, _, 5) => {
+                self.sub_xy(x, y);
+            }
+            (0x8, _, _, 6) => {
+                self.shr_xy(x);
+            }
+            (0x8, _, _, 7) => {
+                self.subn_xy(x, y);
+            }
+            (0x8, _, _, 0xE) => {
+                self.shl_xy(x);
+            }
+            (0x9, _, _, 0) => {
+                self.sne_xy(x, y);
+            }
+            (0xA, _, _, _) => {
+                self.ld_i_addr(nnn);
+            }
+            (0xB, _, _, _) => {
+                self.jp_v0_addr(nnn);
+            }
+            (0xC, _, _, _) => {
+                self.rnd_byte(x, kk);
+            }
+            (0xD, _, _, _) => {
+                self.drw_xy(x, y, d);
+            }
+            (0xE, _, 9, 0xE) => {
+                self.skp_vx(x);
+            }
+            (0xE, _, 0xA, 1) => {
+                self.sknp_vx(x);
+            }
+            (0xF, _, 0, 7) => {
+                self.ld_vx_dt(x);
+            }
+            (0xF, _, 0, 0xA) => {
+                self.ld_vx_k(x);
+            }
+            (0xF, _, 1, 5) => {
+                self.ld_dt_vx(x);
+            }
+            (0xF, _, 1, 8) => {
+                self.ld_st_vx(x);
+            }
+            (0xF, _, 1, 0xE) => {
+                self.add_i_vx(x);
+            }
+            (0xF, _, 2, 9) => {
+                self.ld_f_vx(x);
+            }
+            (0xF, _, 3, 3) => {
+                self.ld_b_vx(x);
+            }
+            (0xF, _, 5, 5) => {
+                self.ld_i_vx(x);
+            }
+            (0xF, _, 6, 5) => {
+                self.ld_vx_i(x);
+            }
+            _ => {
+                warn!("Executing unknown opcode");
+                todo!("opcode {:04x}", opcode);
+            }
         }
+        println!("\x1b[?25h");
     }
 
     fn sys_addr(&mut self, nnn: u16) {
@@ -531,16 +526,18 @@ impl Cpu {
 
     fn skp_vx(&mut self, x: u8) {
         info!("Executing function: skp_vx");
-        if(self.key[self.registers[x as usize] as usize]) {
+        if (self.key[self.registers[x as usize] as usize]) {
             self.position_in_memory += 2;
         }
+        self.key[self.registers[x as usize] as usize] = false;
     }
 
     fn sknp_vx(&mut self, x: u8) {
         info!("Executing function: sknp_vx");
-        if(!self.key[self.registers[x as usize] as usize]) {
+        if (!self.key[self.registers[x as usize] as usize]) {
             self.position_in_memory += 2;
         }
+        self.key[self.registers[x as usize] as usize] = false;
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
@@ -556,6 +553,7 @@ impl Cpu {
                 return;
             }
         }
+        self.key[self.registers[x as usize] as usize] = false;
     }
 
     fn ld_dt_vx(&mut self, x: u8) {
@@ -617,43 +615,96 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let cpu = Arc::new(Mutex::new(Cpu::new("rom/Space Invaders [David Winter] (alt).ch8")));
+    let cpu = Arc::new(Mutex::new(Cpu::new(
+        "rom/tetris.ch8",
+    )));
 
-    let cpu_clone_for_run = cpu.clone();
-    let handle_for_run = thread::spawn(move || {
-        info!("Executing function: run");
-        let mut cpu = cpu_clone_for_run.lock().unwrap();
-        info!("Lock acquired for run");
-        cpu.run();
-    });
-
-    let cpu_clone_for_decrement_timers = cpu.clone();
-    let handle_for_decrement_timers = thread::spawn(move || {
-        loop {
-            {
-                info!("Executing function: decrement_timers");
-                let mut cpu = cpu_clone_for_decrement_timers.lock().unwrap();
-                info!("Lock acquired for decrement_timers");
-                cpu.decrement_timers();
+    {
+        let cpu = cpu.clone();
+        let _ = thread::spawn(move || {
+            loop {
+                {
+                    let mut cpu = cpu.lock().unwrap();
+                    cpu.run();
+                }
+                thread::sleep(Duration::from_millis(1000 / 60)); // この値は調整可能です
             }
-            thread::sleep(Duration::from_millis(1000 / 60)); // 60Hz
-        }
-    });
+        });
+    }
 
-    let cpu_clone_for_read_keyboard_input = cpu.clone();
-    let handle_for_read_keyboard_input = thread::spawn(move || {
-        loop {
-            {
-                info!("Executing function: read_keyboard_input");
-                let mut cpu = cpu_clone_for_read_keyboard_input.lock().unwrap();
-                info!("Lock acquired for read_keyboard_input");
-                cpu.read_keyboard_input();
+    loop {
+        let g = Getch::new();
+        match g.getch() {
+            Ok(Key::Char('1')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x1] = true;
             }
-            thread::sleep(Duration::from_millis(1000 / 60)); // 60Hz
+            Ok(Key::Char('2')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x2] = true;
+            }
+            Ok(Key::Char('3')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x3] = true;
+            }
+            Ok(Key::Char('4')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0xC] = true;
+            }
+            Ok(Key::Char('q')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x4] = true;
+            }
+            Ok(Key::Char('w')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x5] = true;
+            }
+            Ok(Key::Char('e')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x6] = true;
+            }
+            Ok(Key::Char('r')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0xD] = true;
+            }
+            Ok(Key::Char('a')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x7] = true;
+            }
+            Ok(Key::Char('s')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x8] = true;
+            }
+            Ok(Key::Char('d')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x9] = true;
+            }
+            Ok(Key::Char('f')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0xE] = true;
+            }
+            Ok(Key::Char('z')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0xA] = true;
+            }
+            Ok(Key::Char('x')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0x0] = true;
+            }
+            Ok(Key::Char('c')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0xB] = true;
+            }
+            Ok(Key::Char('v')) => {
+                let mut cpu = cpu.lock().unwrap();
+                cpu.key[0xF] = true;
+            }
+            Ok(Key::Esc) => {
+                std::process::exit(0);
+            }
+            _ => {}
         }
-    });
 
-    handle_for_run.join().unwrap();
-    handle_for_decrement_timers.join().unwrap();
-    handle_for_read_keyboard_input.join().unwrap();
+        thread::sleep(Duration::from_millis(1000 / 60)); // 60Hz
+    }
 }
