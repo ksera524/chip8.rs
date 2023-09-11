@@ -364,7 +364,10 @@ impl Cpu {
 
     fn se_xy(&mut self, x: u8, y: u8) {
         info!("Executing function: se_xy");
-        if self.registers[x as usize] == self.registers[y as usize] {
+        let vx = self.registers[x as usize];
+        let vy = self.registers[y as usize];
+
+        if vx == vy {
             self.position_in_memory += 2;
         }
     }
@@ -377,14 +380,7 @@ impl Cpu {
     fn add_byte(&mut self, x: u8, kk: u8) {
         info!("Executing function: add_byte");
         let vx = self.registers[x as usize];
-        let (val, overflow) = vx.overflowing_add(kk);
-        self.registers[x as usize] = val;
-
-        if overflow {
-            self.registers[0xF] = 1;
-        } else {
-            self.registers[0xF] = 0;
-        }
+        self.registers[x as usize] = vx.overflowing_add(kk).0;
     }
 
     fn ld_xy(&mut self, x: u8, y: u8) {
@@ -430,7 +426,7 @@ impl Cpu {
         let (val, overflow) = vx.overflowing_sub(vy);
         self.registers[x as usize] = val;
 
-        if overflow {
+        if !overflow {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
@@ -440,14 +436,9 @@ impl Cpu {
     fn shr_xy(&mut self, x: u8) {
         info!("Executing function: shr_xy");
         let vx = self.registers[x as usize];
-        let (val, overflow) = vx.overflowing_shr(1);
-        self.registers[x as usize] = val;
 
-        if overflow {
-            self.registers[0xF] = 1;
-        } else {
-            self.registers[0xF] = 0;
-        }
+        self.registers[0xF] = vx & 0x01;
+        self.registers[x as usize] /= 2;
     }
 
     fn subn_xy(&mut self, x: u8, y: u8) {
@@ -457,8 +448,7 @@ impl Cpu {
 
         let (val, overflow) = vy.overflowing_sub(vx);
         self.registers[x as usize] = val;
-
-        if overflow {
+        if !overflow {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
@@ -578,9 +568,10 @@ impl Cpu {
 
     fn ld_b_vx(&mut self, x: u8) {
         info!("Executing function: ld_b_vx");
-        self.memory[self.index_register as usize] = self.registers[x as usize] / 100;
-        self.memory[self.index_register as usize + 1] = (self.registers[x as usize] / 10) % 10;
-        self.memory[self.index_register as usize + 2] = (self.registers[x as usize] % 100) % 10;
+        let vx = self.registers[x as usize];
+        self.memory[self.index_register as usize] = (vx / 100) % 10;
+        self.memory[self.index_register as usize + 1] = (vx / 10) % 10;
+        self.memory[self.index_register as usize + 2] = vx % 10;
     }
 
     fn ld_i_vx(&mut self, x: u8) {
