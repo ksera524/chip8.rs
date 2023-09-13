@@ -167,8 +167,21 @@ impl Cpu {
     }
 
     fn run(&mut self) {
+        info!(
+            "v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x}",
+            self.registers,
+            self.index_register,
+            self.index_register,
+            self.stack,
+            self.stack_pointer,
+            self.position_in_memory,
+            self.position_in_memory,
+            self.delay_timer
+        );
+
         self.render_display();
         let opcode = self.read_opcode();
+
         self.position_in_memory += 2;
 
         let c = ((opcode & 0xF000) >> 12) as u8;
@@ -178,22 +191,6 @@ impl Cpu {
 
         let nnn = opcode & 0x0FFF;
         let kk:u8 = (opcode & 0x00FF) as u8;
-
-        /* 
-        info!(
-            "opcode: {:04x} c: {:01x} x: {:01x} y: {:01x} d: {:01x} nnn: {:03x} kk: {:02x}",
-            opcode, c, x, y, d, nnn, kk
-        );
-        info!(
-                "registers: {:02x?} position_in_memory: {:04x} index_register: {:04x} stack_pointer: {:02x}",
-                self.registers, self.position_in_memory, self.index_register, self.stack_pointer
-            );
-        info!(
-            "stack: {:04x?} delay_timer: {:02x} sound_timer: {:02x}",
-            self.stack, self.delay_timer, self.sound_timer
-        );
-        info!("key: {:02x?}", self.key);
-        */
 
         match (c, x, y, d) {
             (0, 0, 0xE, 0) => {
@@ -330,12 +327,12 @@ impl Cpu {
     }
 
     fn jp_addr(&mut self, nnn: u16) {
-        info!("Executing function: jp_addr");
+        info!("Executing function: jp_addr :{}", nnn);
         self.position_in_memory = nnn as usize;
     }
 
     fn call(&mut self, nnn: u16) {
-        info!("Executing function: call");
+        info!("Executing function: call nnn: {}", nnn);
         let sp = self.stack_pointer;
         let stack = &mut self.stack;
 
@@ -349,8 +346,9 @@ impl Cpu {
     }
 
     fn se_byte(&mut self, x: u8, kk: u8) {
-        info!("Executing function: se_byte");
-        if self.registers[x as usize] == kk {
+        let vx = self.registers[x as usize];
+        info!("Executing function: se_byte x: {} vx: {} kk: {}", x ,vx, kk);
+        if vx == kk {
             self.position_in_memory += 2;
         }
     }
@@ -515,22 +513,26 @@ impl Cpu {
     }
 
     fn skp_vx(&mut self, x: u8) {
-        info!("Executing function: skp_vx");
-        if (self.key[self.registers[x as usize] as usize]) {
+        let vx = self.registers[x as usize];
+        info!("Executing function: skp_vx x: {} vx: {}", x ,vx);
+        if self.key[vx as usize] {
             self.position_in_memory += 2;
+            self.key = [false; 16];
         }
-        self.key[self.registers[x as usize] as usize] = false;
     }
 
     fn sknp_vx(&mut self, x: u8) {
-        info!("Executing function: sknp_vx");
-        if (!self.key[self.registers[x as usize] as usize]) {
+        let vx = self.registers[x as usize];
+        info!("Executing function: sknp_vx x: {} vx: {}", x ,vx);
+        if !self.key[vx as usize] {
             self.position_in_memory += 2;
+            self.key = [false; 16];
         }
-        self.key[self.registers[x as usize] as usize] = false;
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
+        let vx = self.registers[x as usize];
+        info!("Executing function: ld_vx_dt x: {} vx: {}", x ,vx);
         self.registers[x as usize] = self.delay_timer;
     }
 
@@ -608,7 +610,7 @@ fn main() {
     info!("Starting the emulator");
     let cpu = Arc::new(Mutex::new(Cpu::new(
         "rom/tetris.ch8",
-    )));
+    ))); 
 
     {
         let cpu = cpu.clone();
@@ -618,7 +620,7 @@ fn main() {
                     let mut cpu = cpu.lock().unwrap();
                     cpu.run();
                 }
-                thread::sleep(Duration::from_millis(1000 / 60)); // この値は調整可能です
+                thread::sleep(Duration::from_millis(1000/20)); 
             }
         });
     }
@@ -696,6 +698,6 @@ fn main() {
             _ => {}
         }
 
-        thread::sleep(Duration::from_millis(1000 / 60)); // 60Hz
+        thread::sleep(Duration::from_millis(1000 /20)); // 60Hz
     }
 }
