@@ -8,7 +8,7 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
@@ -612,92 +612,26 @@ fn main() {
         "rom/tetris.ch8",
     ))); 
 
-    {
+    let handle = {
         let cpu = cpu.clone();
-        let _ = thread::spawn(move || {
+        thread::spawn(move || {
             loop {
+                let start = Instant::now();
                 {
                     let mut cpu = cpu.lock().unwrap();
                     cpu.run();
+                    cpu.decrement_timers();
                 }
-                thread::sleep(Duration::from_millis(1000/20)); 
-            }
-        });
-    }
 
-    loop {
-        let g = Getch::new();
-        match g.getch() {
-            Ok(Key::Char('1')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x1] = true;
+                let duration = start.elapsed();
+                let target_duration = Duration::from_secs_f64(1.0 / 60.0);
+                if duration < target_duration {
+                    thread::sleep(target_duration - duration);
+                }
             }
-            Ok(Key::Char('2')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x2] = true;
-            }
-            Ok(Key::Char('3')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x3] = true;
-            }
-            Ok(Key::Char('4')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0xC] = true;
-            }
-            Ok(Key::Char('q')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x4] = true;
-            }
-            Ok(Key::Char('w')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x5] = true;
-            }
-            Ok(Key::Char('e')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x6] = true;
-            }
-            Ok(Key::Char('r')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0xD] = true;
-            }
-            Ok(Key::Char('a')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x7] = true;
-            }
-            Ok(Key::Char('s')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x8] = true;
-            }
-            Ok(Key::Char('d')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x9] = true;
-            }
-            Ok(Key::Char('f')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0xE] = true;
-            }
-            Ok(Key::Char('z')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0xA] = true;
-            }
-            Ok(Key::Char('x')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0x0] = true;
-            }
-            Ok(Key::Char('c')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0xB] = true;
-            }
-            Ok(Key::Char('v')) => {
-                let mut cpu = cpu.lock().unwrap();
-                cpu.key[0xF] = true;
-            }
-            Ok(Key::Esc) => {
-                std::process::exit(0);
-            }
-            _ => {}
-        }
+        })
+    };
 
-        thread::sleep(Duration::from_millis(1000 /20)); // 60Hz
-    }
+    handle.join().unwrap();
 }
+
