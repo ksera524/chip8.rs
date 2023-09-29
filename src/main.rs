@@ -6,7 +6,6 @@ use simplelog::*;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -190,7 +189,7 @@ impl Cpu {
         let d = ((opcode & 0x000F) >> 0) as u8;
 
         let nnn = opcode & 0x0FFF;
-        let kk:u8 = (opcode & 0x00FF) as u8;
+        let kk: u8 = (opcode & 0x00FF) as u8;
 
         match (c, x, y, d) {
             (0, 0, 0xE, 0) => {
@@ -347,7 +346,7 @@ impl Cpu {
 
     fn se_byte(&mut self, x: u8, kk: u8) {
         let vx = self.registers[x as usize];
-        info!("Executing function: se_byte x: {} vx: {} kk: {}", x ,vx, kk);
+        info!("Executing function: se_byte x: {} vx: {} kk: {}", x, vx, kk);
         if vx == kk {
             self.position_in_memory += 2;
         }
@@ -514,7 +513,7 @@ impl Cpu {
 
     fn skp_vx(&mut self, x: u8) {
         let vx = self.registers[x as usize];
-        info!("Executing function: skp_vx x: {} vx: {}", x ,vx);
+        info!("Executing function: skp_vx x: {} vx: {}", x, vx);
         if self.key[vx as usize] {
             self.position_in_memory += 2;
             self.key = [false; 16];
@@ -523,7 +522,7 @@ impl Cpu {
 
     fn sknp_vx(&mut self, x: u8) {
         let vx = self.registers[x as usize];
-        info!("Executing function: sknp_vx x: {} vx: {}", x ,vx);
+        info!("Executing function: sknp_vx x: {} vx: {}", x, vx);
         if !self.key[vx as usize] {
             self.position_in_memory += 2;
             self.key = [false; 16];
@@ -532,12 +531,22 @@ impl Cpu {
 
     fn ld_vx_dt(&mut self, x: u8) {
         let vx = self.registers[x as usize];
-        info!("Executing function: ld_vx_dt x: {} vx: {}", x ,vx);
+        info!("Executing function: ld_vx_dt x: {} vx: {}", x, vx);
         self.registers[x as usize] = self.delay_timer;
     }
 
     fn ld_vx_k(&mut self, x: u8) {
         info!("Executing function: ld_vx_k");
+        self.read_keyboard_input();
+        for i in 0..16 {
+            if self.key[i] {
+                self.registers[x as usize] = i as u8;
+                return;
+            }
+        }
+        self.key[self.registers[x as usize] as usize] = false;
+
+
         self.read_keyboard_input();
         for i in 0..16 {
             if self.key[i] {
@@ -608,30 +617,16 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let cpu = Arc::new(Mutex::new(Cpu::new(
-        "rom/tetris.ch8",
-    ))); 
+    let mut cpu = Cpu::new("rom/tetris.ch8");
 
-    let handle = {
-        let cpu = cpu.clone();
-        thread::spawn(move || {
-            loop {
-                let start = Instant::now();
-                {
-                    let mut cpu = cpu.lock().unwrap();
-                    cpu.run();
-                    cpu.decrement_timers();
-                }
-
-                let duration = start.elapsed();
-                let target_duration = Duration::from_secs_f64(1.0 / 60.0);
-                if duration < target_duration {
-                    thread::sleep(target_duration - duration);
-                }
-            }
-        })
-    };
-
-    handle.join().unwrap();
+    loop {
+        let start = Instant::now();
+        cpu.run();
+        cpu.decrement_timers();
+        let duration = start.elapsed();
+        let target_duration = Duration::from_secs_f64(1.0 / 60.0);
+        if duration < target_duration {
+            thread::sleep(target_duration - duration);
+        }
+    }
 }
-
