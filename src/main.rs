@@ -41,11 +41,24 @@ struct Cpu {
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
     sound_timer: u8,
     delay_timer: Arc<Mutex<u8>>,
+    delay_timer_thread: Option<thread::JoinHandle<()>>,
     key: Option<u8>,
 }
 
 impl Cpu {
     fn new(file_path: &str) -> Cpu {
+        let delay_timer = Arc::new(Mutex::new(0));
+        let delay_timer_clone = Arc::clone(&delay_timer);
+
+        let delay_timer_thread = Some(thread::spawn(move || loop {
+            let mut delay_timer = delay_timer_clone.lock().unwrap();
+            if *delay_timer > 0 {
+                *delay_timer -= 1;
+            }
+
+            thread::sleep(std::time::Duration::from_millis(1000 / 60));
+        }));
+
         let mut cpu = Cpu {
             registers: [0; 16],
             position_in_memory: 0x200,
@@ -53,7 +66,8 @@ impl Cpu {
             stack: [0; 16],
             stack_pointer: 0,
             index_register: 0,
-            delay_timer: Arc::new(Mutex::new(0)),
+            delay_timer,
+            delay_timer_thread,
             sound_timer: 0,
             display: [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
             key: None,
@@ -109,17 +123,6 @@ impl Cpu {
         // カーソルを表示し、画面をフラッシュ
         print!("\x1b[?25h");
         std::io::stdout().flush().unwrap();
-    }
-
-    fn decrement_timers(&mut self) {
-        let mut delay_timer = self.delay_timer.lock().unwrap();
-        if *delay_timer > 0 {
-            *delay_timer -= 1;
-        }
-
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
     }
 
     fn update(&mut self, keyboard_receiver: &mut mpsc::Receiver<u8>) {
@@ -585,7 +588,14 @@ impl Cpu {
         loop {
             self.update(&mut keyboard_receiver);
             self.draw();
-            self.decrement_timers();
+        }
+    }
+}
+
+impl Drop for Cpu {
+    fn drop(&mut self) {
+        if let Some(handle) = self.delay_timer_thread.take() {
+            handle.join().unwrap();
         }
     }
 }
@@ -607,7 +617,7 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let mut cpu = Cpu::new("rom/tetris.ch8");
+    let mut cpu = Cpu::new("rom/Tetris [Fran Dachille, 1991].ch8");
 
     cpu.start();
 }
