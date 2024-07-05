@@ -7,9 +7,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::mpsc;
-use std::thread;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::thread;
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
@@ -42,7 +41,7 @@ struct Cpu {
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
     sound_timer: u8,
     delay_timer: Arc<Mutex<u8>>,
-    key: Option<u8>
+    key: Option<u8>,
 }
 
 impl Cpu {
@@ -91,26 +90,26 @@ impl Cpu {
     }
 
     fn draw(&self) {
-    // カーソルを非表示にし、画面の一番上に移動
-    print!("\x1b[?25l\x1b[H");
+        // カーソルを非表示にし、画面の一番上に移動
+        print!("\x1b[?25l\x1b[H");
 
-    // 描画用のバッファを準備
-    let mut buffer = String::with_capacity(DISPLAY_HEIGHT * (DISPLAY_WIDTH + 1));
+        // 描画用のバッファを準備
+        let mut buffer = String::with_capacity(DISPLAY_HEIGHT * (DISPLAY_WIDTH + 1));
 
-    for row in &self.display {
-        for &pixel in row {
-            buffer.push(if pixel { '█' } else { ' ' });
+        for row in &self.display {
+            for &pixel in row {
+                buffer.push(if pixel { '█' } else { ' ' });
+            }
+            buffer.push('\n');
         }
-        buffer.push('\n');
+
+        // バッファの内容を一度に出力
+        print!("{}", buffer);
+
+        // カーソルを表示し、画面をフラッシュ
+        print!("\x1b[?25h");
+        std::io::stdout().flush().unwrap();
     }
-
-    // バッファの内容を一度に出力
-    print!("{}", buffer);
-
-    // カーソルを表示し、画面をフラッシュ
-    print!("\x1b[?25h");
-    std::io::stdout().flush().unwrap();
-}
 
     fn decrement_timers(&mut self) {
         let mut delay_timer = self.delay_timer.lock().unwrap();
@@ -123,7 +122,7 @@ impl Cpu {
         }
     }
 
-    fn update(&mut self,keyboard_receiver: &mut mpsc::Receiver<u8>) {
+    fn update(&mut self, keyboard_receiver: &mut mpsc::Receiver<u8>) {
         let dt = *self.delay_timer.lock().unwrap();
         info!(
             "v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x} key={:?}",
@@ -135,7 +134,7 @@ impl Cpu {
             self.position_in_memory,
             self.position_in_memory,
             dt,
-            self.key 
+            self.key
         );
 
         let opcode = self.read_opcode();
@@ -150,7 +149,7 @@ impl Cpu {
         let nnn = opcode & 0x0FFF;
         let kk: u8 = (opcode & 0x00FF) as u8;
 
-        //opcode 
+        //opcode
         info!("Executing opcode: {:04x}", opcode);
 
         match (c, x, y, d) {
@@ -227,16 +226,16 @@ impl Cpu {
                 self.drw_xy(x, y, d);
             }
             (0xE, _, 9, 0xE) => {
-                self.skp_vx(x,keyboard_receiver);
+                self.skp_vx(x, keyboard_receiver);
             }
             (0xE, _, 0xA, 1) => {
-                self.sknp_vx(x,keyboard_receiver);
+                self.sknp_vx(x, keyboard_receiver);
             }
             (0xF, _, 0, 7) => {
                 self.ld_vx_dt(x);
             }
             (0xF, _, 0, 0xA) => {
-                self.ld_vx_k(x,keyboard_receiver);
+                self.ld_vx_k(x, keyboard_receiver);
             }
             (0xF, _, 1, 5) => {
                 self.ld_dt_vx(x);
@@ -417,7 +416,7 @@ impl Cpu {
         // 最上位ビット（7番目のビット）をVfにセット
         self.registers[0xF] = (vx & 0x80) >> 7;
         // 左シフト（2倍）
-        self.registers[x as usize] = vx.overflowing_mul(2).0;   
+        self.registers[x as usize] = vx.overflowing_mul(2).0;
     }
 
     fn sne_xy(&mut self, x: u8, y: u8) {
@@ -465,16 +464,17 @@ impl Cpu {
         }
     }
 
-    fn skp_vx(&mut self, x: u8,keyboard_receiver: &mut mpsc::Receiver<u8>) {
+    fn skp_vx(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
         let vx = self.registers[x as usize];
         if let Some(key) = self.key(keyboard_receiver) {
             if key == vx {
                 self.position_in_memory += 2;
                 self.key = None;
             }
-    }}
+        }
+    }
 
-    fn sknp_vx(&mut self, x: u8,keyboard_receiver: &mut mpsc::Receiver<u8>) {
+    fn sknp_vx(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
         let vx = self.registers[x as usize];
         info!("Executing function: sknp_vx x: {} vx: {}", x, vx);
         if let Some(key) = self.key(keyboard_receiver) {
@@ -502,12 +502,15 @@ impl Cpu {
         }
 
         if !pressed {
-            self.position_in_memory -= 2;//キーが押されるまで待つ
+            self.position_in_memory -= 2; //キーが押されるまで待つ
         }
     }
 
     fn ld_dt_vx(&mut self, x: u8) {
-        info!("Executing function: ld_dt_vx x: {} vx: {}", x, self.registers[x as usize]);
+        info!(
+            "Executing function: ld_dt_vx x: {} vx: {}",
+            x, self.registers[x as usize]
+        );
         let mut delay_timer = self.delay_timer.lock().unwrap();
         *delay_timer = self.registers[x as usize];
     }
@@ -554,35 +557,36 @@ impl Cpu {
         let (keyboard_sender, mut keyboard_receiver) = mpsc::channel();
 
         thread::spawn(move || {
-        let g = Getch::new(); 
-        loop {
-        match g.getch() {
-                Ok(Key::Char('1')) => keyboard_sender.send(0x1).unwrap(),
-                Ok(Key::Char('2')) => keyboard_sender.send(0x2).unwrap(),
-                Ok(Key::Char('3')) => keyboard_sender.send(0x3).unwrap(),
-                Ok(Key::Char('4')) => keyboard_sender.send(0xC).unwrap(),
-                Ok(Key::Char('q')) => keyboard_sender.send(0x4).unwrap(),
-                Ok(Key::Char('w')) => keyboard_sender.send(0x5).unwrap(),
-                Ok(Key::Char('e')) => keyboard_sender.send(0x6).unwrap(),
-                Ok(Key::Char('r')) => keyboard_sender.send(0xD).unwrap(),
-                Ok(Key::Char('a')) => keyboard_sender.send(0x7).unwrap(),
-                Ok(Key::Char('s')) => keyboard_sender.send(0x8).unwrap(),
-                Ok(Key::Char('d')) => keyboard_sender.send(0x9).unwrap(),
-                Ok(Key::Char('f')) => keyboard_sender.send(0xE).unwrap(),
-                Ok(Key::Char('z')) => keyboard_sender.send(0xA).unwrap(),
-                Ok(Key::Char('x')) => keyboard_sender.send(0x0).unwrap(),
-                Ok(Key::Char('c')) => keyboard_sender.send(0xB).unwrap(),
-                Ok(Key::Char('v')) => keyboard_sender.send(0xF).unwrap(),
-                Ok(Key::Esc) => std::process::exit(0),
-                _ => {}
-        }}});
+            let g = Getch::new();
+            loop {
+                match g.getch() {
+                    Ok(Key::Char('1')) => keyboard_sender.send(0x1).unwrap(),
+                    Ok(Key::Char('2')) => keyboard_sender.send(0x2).unwrap(),
+                    Ok(Key::Char('3')) => keyboard_sender.send(0x3).unwrap(),
+                    Ok(Key::Char('4')) => keyboard_sender.send(0xC).unwrap(),
+                    Ok(Key::Char('q')) => keyboard_sender.send(0x4).unwrap(),
+                    Ok(Key::Char('w')) => keyboard_sender.send(0x5).unwrap(),
+                    Ok(Key::Char('e')) => keyboard_sender.send(0x6).unwrap(),
+                    Ok(Key::Char('r')) => keyboard_sender.send(0xD).unwrap(),
+                    Ok(Key::Char('a')) => keyboard_sender.send(0x7).unwrap(),
+                    Ok(Key::Char('s')) => keyboard_sender.send(0x8).unwrap(),
+                    Ok(Key::Char('d')) => keyboard_sender.send(0x9).unwrap(),
+                    Ok(Key::Char('f')) => keyboard_sender.send(0xE).unwrap(),
+                    Ok(Key::Char('z')) => keyboard_sender.send(0xA).unwrap(),
+                    Ok(Key::Char('x')) => keyboard_sender.send(0x0).unwrap(),
+                    Ok(Key::Char('c')) => keyboard_sender.send(0xB).unwrap(),
+                    Ok(Key::Char('v')) => keyboard_sender.send(0xF).unwrap(),
+                    Ok(Key::Esc) => std::process::exit(0),
+                    _ => {}
+                }
+            }
+        });
 
         loop {
             self.update(&mut keyboard_receiver);
             self.draw();
             self.decrement_timers();
         }
-        
     }
 }
 
