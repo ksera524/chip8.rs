@@ -1,13 +1,15 @@
 use getch_rs::{Getch, Key};
 use log::{info, warn};
-use rand::Rng;
+use rand::prelude::*;
 use simplelog::LevelFilter;
 use simplelog::*;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
@@ -37,10 +39,10 @@ struct Cpu {
     stack: [u16; 16],
     stack_pointer: usize,
     index_register: u16,
-    delay_timer: u8,
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
     sound_timer: u8,
-    key: [bool; 16],
+    delay_timer: Arc<Mutex<u8>>,
+    key: Option<u8>
 }
 
 impl Cpu {
@@ -52,10 +54,10 @@ impl Cpu {
             stack: [0; 16],
             stack_pointer: 0,
             index_register: 0,
-            delay_timer: 0,
+            delay_timer: Arc::new(Mutex::new(0)),
             sound_timer: 0,
             display: [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
-            key: [false; 16],
+            key: None,
         };
 
         let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
@@ -81,83 +83,39 @@ impl Cpu {
         op_byte_1 << 8 | op_byte_2
     }
 
-    fn read_keyboard_input(&mut self) {
-        info!("Executing function: read_keyboard_input");
-        let g = Getch::new();
-        match g.getch() {
-            Ok(Key::Char('1')) => {
-                self.key[0x1] = true;
-            }
-            Ok(Key::Char('2')) => {
-                self.key[0x2] = true;
-            }
-            Ok(Key::Char('3')) => {
-                self.key[0x3] = true;
-            }
-            Ok(Key::Char('4')) => {
-                self.key[0xC] = true;
-            }
-            Ok(Key::Char('q')) => {
-                self.key[0x4] = true;
-            }
-            Ok(Key::Char('w')) => {
-                self.key[0x5] = true;
-            }
-            Ok(Key::Char('e')) => {
-                self.key[0x6] = true;
-            }
-            Ok(Key::Char('r')) => {
-                self.key[0xD] = true;
-            }
-            Ok(Key::Char('a')) => {
-                self.key[0x7] = true;
-            }
-            Ok(Key::Char('s')) => {
-                self.key[0x8] = true;
-            }
-            Ok(Key::Char('d')) => {
-                self.key[0x9] = true;
-            }
-            Ok(Key::Char('f')) => {
-                self.key[0xE] = true;
-            }
-            Ok(Key::Char('z')) => {
-                self.key[0xA] = true;
-            }
-            Ok(Key::Char('x')) => {
-                self.key[0x0] = true;
-            }
-            Ok(Key::Char('c')) => {
-                self.key[0xB] = true;
-            }
-            Ok(Key::Char('v')) => {
-                self.key[0xF] = true;
-            }
-            Ok(Key::Esc) => {
-                std::process::exit(0);
-            }
-            _ => {}
-        }
+    fn key(&mut self, receiver: &mut mpsc::Receiver<u8>) -> Option<u8> {
+        receiver.try_recv().ok().or(self.key).map(|k| {
+            self.key = Some(k);
+            k
+        })
     }
 
-    fn render_display(&self) {
-        println!("\x1b[2J\x1b[H\x1b[?25l");
-        println!("\x1b[H");
-        for row in &self.display {
-            for &pixel in row {
-                if pixel {
-                    print!("#");
-                } else {
-                    print!(" ");
-                }
-            }
-            println!();
+    fn draw(&self) {
+    // カーソルを非表示にし、画面の一番上に移動
+    print!("\x1b[?25l\x1b[H");
+
+    // 描画用のバッファを準備
+    let mut buffer = String::with_capacity(DISPLAY_HEIGHT * (DISPLAY_WIDTH + 1));
+
+    for row in &self.display {
+        for &pixel in row {
+            buffer.push(if pixel { '█' } else { ' ' });
         }
+        buffer.push('\n');
     }
+
+    // バッファの内容を一度に出力
+    print!("{}", buffer);
+
+    // カーソルを表示し、画面をフラッシュ
+    print!("\x1b[?25h");
+    std::io::stdout().flush().unwrap();
+}
 
     fn decrement_timers(&mut self) {
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
+        let mut delay_timer = self.delay_timer.lock().unwrap();
+        if *delay_timer > 0 {
+            *delay_timer -= 1;
         }
 
         if self.sound_timer > 0 {
@@ -165,9 +123,10 @@ impl Cpu {
         }
     }
 
-    fn run(&mut self) {
+    fn update(&mut self,keyboard_receiver: &mut mpsc::Receiver<u8>) {
+        let dt = *self.delay_timer.lock().unwrap();
         info!(
-            "v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x}",
+            "v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x} key={:?}",
             self.registers,
             self.index_register,
             self.index_register,
@@ -175,10 +134,10 @@ impl Cpu {
             self.stack_pointer,
             self.position_in_memory,
             self.position_in_memory,
-            self.delay_timer
+            dt,
+            self.key 
         );
 
-        self.render_display();
         let opcode = self.read_opcode();
 
         self.position_in_memory += 2;
@@ -190,6 +149,9 @@ impl Cpu {
 
         let nnn = opcode & 0x0FFF;
         let kk: u8 = (opcode & 0x00FF) as u8;
+
+        //opcode 
+        info!("Executing opcode: {:04x}", opcode);
 
         match (c, x, y, d) {
             (0, 0, 0xE, 0) => {
@@ -265,16 +227,16 @@ impl Cpu {
                 self.drw_xy(x, y, d);
             }
             (0xE, _, 9, 0xE) => {
-                self.skp_vx(x);
+                self.skp_vx(x,keyboard_receiver);
             }
             (0xE, _, 0xA, 1) => {
-                self.sknp_vx(x);
+                self.sknp_vx(x,keyboard_receiver);
             }
             (0xF, _, 0, 7) => {
                 self.ld_vx_dt(x);
             }
             (0xF, _, 0, 0xA) => {
-                self.ld_vx_k(x);
+                self.ld_vx_k(x,keyboard_receiver);
             }
             (0xF, _, 1, 5) => {
                 self.ld_dt_vx(x);
@@ -302,7 +264,6 @@ impl Cpu {
                 todo!("opcode {:04x}", opcode);
             }
         }
-        println!("\x1b[?25h");
     }
 
     fn sys_addr(&mut self, nnn: u16) {
@@ -402,17 +363,15 @@ impl Cpu {
 
     fn add_xy(&mut self, x: u8, y: u8) {
         info!("Executing function: add_xy");
-        let vx = self.registers[x as usize];
-        let vy = self.registers[y as usize];
+        let vx = self.registers[x as usize] as u16;
+        let vy = self.registers[y as usize] as u16;
 
-        let (val, overflow) = vx.overflowing_add(vy);
-        self.registers[x as usize] = val;
-
-        if overflow {
+        if vx + vy > 0xFF {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
+        self.registers[x as usize] = ((vx + vy) & 0xFF) as u8;
     }
 
     fn sub_xy(&mut self, x: u8, y: u8) {
@@ -421,21 +380,21 @@ impl Cpu {
         let vy = self.registers[y as usize];
 
         let (val, overflow) = vx.overflowing_sub(vy);
-        self.registers[x as usize] = val;
-
         if !overflow {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
+        self.registers[x as usize] = val;
     }
 
     fn shr_xy(&mut self, x: u8) {
         info!("Executing function: shr_xy");
         let vx = self.registers[x as usize];
-
+        // 最下位ビットをVfにセット
         self.registers[0xF] = vx & 0x01;
-        self.registers[x as usize] /= 2;
+        // 右シフト（2で割る）
+        self.registers[x as usize] = vx >> 1;
     }
 
     fn subn_xy(&mut self, x: u8, y: u8) {
@@ -444,25 +403,21 @@ impl Cpu {
         let vy = self.registers[y as usize];
 
         let (val, overflow) = vy.overflowing_sub(vx);
-        self.registers[x as usize] = val;
         if !overflow {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
+        self.registers[x as usize] = val;
     }
 
     fn shl_xy(&mut self, x: u8) {
         info!("Executing function: shl_xy");
         let vx = self.registers[x as usize];
-        let (val, overflow) = vx.overflowing_shl(1);
-        self.registers[x as usize] = val;
-
-        if overflow {
-            self.registers[0xF] = 1;
-        } else {
-            self.registers[0xF] = 0;
-        }
+        // 最上位ビット（7番目のビット）をVfにセット
+        self.registers[0xF] = (vx & 0x80) >> 7;
+        // 左シフト（2倍）
+        self.registers[x as usize] = vx.overflowing_mul(2).0;   
     }
 
     fn sne_xy(&mut self, x: u8, y: u8) {
@@ -484,8 +439,7 @@ impl Cpu {
 
     fn rnd_byte(&mut self, x: u8, kk: u8) {
         info!("Executing function: rnd_byte");
-        let mut rng = rand::thread_rng();
-        let random_number: u8 = rng.gen();
+        let random_number: u8 = random();
         self.registers[x as usize] = random_number & kk;
     }
 
@@ -511,55 +465,51 @@ impl Cpu {
         }
     }
 
-    fn skp_vx(&mut self, x: u8) {
+    fn skp_vx(&mut self, x: u8,keyboard_receiver: &mut mpsc::Receiver<u8>) {
         let vx = self.registers[x as usize];
-        info!("Executing function: skp_vx x: {} vx: {}", x, vx);
-        if self.key[vx as usize] {
-            self.position_in_memory += 2;
-            self.key = [false; 16];
-        }
-    }
+        if let Some(key) = self.key(keyboard_receiver) {
+            if key == vx {
+                self.position_in_memory += 2;
+                self.key = None;
+            }
+    }}
 
-    fn sknp_vx(&mut self, x: u8) {
+    fn sknp_vx(&mut self, x: u8,keyboard_receiver: &mut mpsc::Receiver<u8>) {
         let vx = self.registers[x as usize];
         info!("Executing function: sknp_vx x: {} vx: {}", x, vx);
-        if !self.key[vx as usize] {
-            self.position_in_memory += 2;
-            self.key = [false; 16];
+        if let Some(key) = self.key(keyboard_receiver) {
+            if key != vx {
+                self.position_in_memory += 2;
+                self.key = None;
+            }
         }
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
         let vx = self.registers[x as usize];
+        let delay_timer = self.delay_timer.lock().unwrap();
         info!("Executing function: ld_vx_dt x: {} vx: {}", x, vx);
-        self.registers[x as usize] = self.delay_timer;
+        self.registers[x as usize] = *delay_timer
     }
 
-    fn ld_vx_k(&mut self, x: u8) {
+    fn ld_vx_k(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
         info!("Executing function: ld_vx_k");
-        self.read_keyboard_input();
-        for i in 0..16 {
-            if self.key[i] {
-                self.registers[x as usize] = i as u8;
-                return;
-            }
-        }
-        self.key[self.registers[x as usize] as usize] = false;
+        let mut pressed = false;
 
-
-        self.read_keyboard_input();
-        for i in 0..16 {
-            if self.key[i] {
-                self.registers[x as usize] = i as u8;
-                return;
-            }
+        if let Some(key) = self.key(keyboard_receiver) {
+            self.registers[x as usize] = key;
+            pressed = true;
         }
-        self.key[self.registers[x as usize] as usize] = false;
+
+        if !pressed {
+            self.position_in_memory -= 2;//キーが押されるまで待つ
+        }
     }
 
     fn ld_dt_vx(&mut self, x: u8) {
-        info!("Executing function: ld_dt_vx");
-        self.delay_timer = self.registers[x as usize];
+        info!("Executing function: ld_dt_vx x: {} vx: {}", x, self.registers[x as usize]);
+        let mut delay_timer = self.delay_timer.lock().unwrap();
+        *delay_timer = self.registers[x as usize];
     }
 
     fn ld_st_vx(&mut self, x: u8) {
@@ -569,7 +519,8 @@ impl Cpu {
 
     fn add_i_vx(&mut self, x: u8) {
         info!("Executing function: add_i_vx");
-        self.index_register += self.registers[x as usize] as u16;
+        let vx = self.registers[x as usize];
+        self.index_register += vx as u16;
     }
 
     fn ld_f_vx(&mut self, x: u8) {
@@ -598,6 +549,41 @@ impl Cpu {
             self.registers[i as usize] = self.memory[self.index_register as usize + i as usize];
         }
     }
+
+    fn start(&mut self) {
+        let (keyboard_sender, mut keyboard_receiver) = mpsc::channel();
+
+        thread::spawn(move || {
+        let g = Getch::new(); 
+        loop {
+        match g.getch() {
+                Ok(Key::Char('1')) => keyboard_sender.send(0x1).unwrap(),
+                Ok(Key::Char('2')) => keyboard_sender.send(0x2).unwrap(),
+                Ok(Key::Char('3')) => keyboard_sender.send(0x3).unwrap(),
+                Ok(Key::Char('4')) => keyboard_sender.send(0xC).unwrap(),
+                Ok(Key::Char('q')) => keyboard_sender.send(0x4).unwrap(),
+                Ok(Key::Char('w')) => keyboard_sender.send(0x5).unwrap(),
+                Ok(Key::Char('e')) => keyboard_sender.send(0x6).unwrap(),
+                Ok(Key::Char('r')) => keyboard_sender.send(0xD).unwrap(),
+                Ok(Key::Char('a')) => keyboard_sender.send(0x7).unwrap(),
+                Ok(Key::Char('s')) => keyboard_sender.send(0x8).unwrap(),
+                Ok(Key::Char('d')) => keyboard_sender.send(0x9).unwrap(),
+                Ok(Key::Char('f')) => keyboard_sender.send(0xE).unwrap(),
+                Ok(Key::Char('z')) => keyboard_sender.send(0xA).unwrap(),
+                Ok(Key::Char('x')) => keyboard_sender.send(0x0).unwrap(),
+                Ok(Key::Char('c')) => keyboard_sender.send(0xB).unwrap(),
+                Ok(Key::Char('v')) => keyboard_sender.send(0xF).unwrap(),
+                Ok(Key::Esc) => std::process::exit(0),
+                _ => {}
+        }}});
+
+        loop {
+            self.update(&mut keyboard_receiver);
+            self.draw();
+            self.decrement_timers();
+        }
+        
+    }
 }
 
 fn main() {
@@ -619,14 +605,5 @@ fn main() {
     info!("Starting the emulator");
     let mut cpu = Cpu::new("rom/tetris.ch8");
 
-    loop {
-        let start = Instant::now();
-        cpu.run();
-        cpu.decrement_timers();
-        let duration = start.elapsed();
-        let target_duration = Duration::from_secs_f64(1.0 / 60.0);
-        if duration < target_duration {
-            thread::sleep(target_duration - duration);
-        }
-    }
+    cpu.start();
 }
