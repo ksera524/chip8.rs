@@ -7,7 +7,6 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 const DISPLAY_WIDTH: usize = 64;
@@ -40,12 +39,13 @@ struct Cpu {
     index_register: u16,
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
     sound_timer: u8,
-    delay_timer: Arc<Mutex<u8>>,
+    delay_timer:u8,
     key: Option<u8>,
 }
 
 impl Cpu {
     fn new(file_path: &str) -> Cpu {
+
         let mut cpu = Cpu {
             registers: [0; 16],
             position_in_memory: 0x200,
@@ -53,7 +53,7 @@ impl Cpu {
             stack: [0; 16],
             stack_pointer: 0,
             index_register: 0,
-            delay_timer: Arc::new(Mutex::new(0)),
+            delay_timer: 0,
             sound_timer: 0,
             display: [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
             key: None,
@@ -98,7 +98,7 @@ impl Cpu {
 
         for row in &self.display {
             for &pixel in row {
-                buffer.push(if pixel { '█' } else { ' ' });
+                buffer.push(if pixel { '#' } else { ' ' });
             }
             buffer.push('\n');
         }
@@ -112,9 +112,8 @@ impl Cpu {
     }
 
     fn decrement_timers(&mut self) {
-        let mut delay_timer = self.delay_timer.lock().unwrap();
-        if *delay_timer > 0 {
-            *delay_timer -= 1;
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
         }
 
         if self.sound_timer > 0 {
@@ -123,7 +122,6 @@ impl Cpu {
     }
 
     fn update(&mut self, keyboard_receiver: &mut mpsc::Receiver<u8>) {
-        let dt = *self.delay_timer.lock().unwrap();
         info!(
             "v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x} key={:?}",
             self.registers,
@@ -133,7 +131,7 @@ impl Cpu {
             self.stack_pointer,
             self.position_in_memory,
             self.position_in_memory,
-            dt,
+            self.delay_timer,
             self.key
         );
 
@@ -487,9 +485,8 @@ impl Cpu {
 
     fn ld_vx_dt(&mut self, x: u8) {
         let vx = self.registers[x as usize];
-        let delay_timer = self.delay_timer.lock().unwrap();
         info!("Executing function: ld_vx_dt x: {} vx: {}", x, vx);
-        self.registers[x as usize] = *delay_timer
+        self.registers[x as usize] = self.delay_timer;
     }
 
     fn ld_vx_k(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
@@ -511,8 +508,8 @@ impl Cpu {
             "Executing function: ld_dt_vx x: {} vx: {}",
             x, self.registers[x as usize]
         );
-        let mut delay_timer = self.delay_timer.lock().unwrap();
-        *delay_timer = self.registers[x as usize];
+       
+        self.delay_timer = self.registers[x as usize];
     }
 
     fn ld_st_vx(&mut self, x: u8) {
@@ -583,9 +580,12 @@ impl Cpu {
         });
 
         loop {
+            for _ in 0..10 {
             self.update(&mut keyboard_receiver);
-            self.draw();
+            }
             self.decrement_timers();
+            self.draw();
+            
         }
     }
 }
@@ -607,7 +607,7 @@ fn main() {
     .unwrap();
 
     info!("Starting the emulator");
-    let mut cpu = Cpu::new("rom/tetris.ch8");
+    let mut cpu = Cpu::new("rom/BRIX");
 
     cpu.start();
 }
