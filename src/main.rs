@@ -1,5 +1,5 @@
 use getch_rs::{Getch, Key};
-use log::{info, warn};
+use log::{debug, warn};
 use rand::prelude::*;
 use simplelog::LevelFilter;
 use simplelog::*;
@@ -30,25 +30,25 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-struct Cpu {
+struct Cpu<T: KeyboardInput> {
     registers: [u8; 16],
-    position_in_memory: usize, //program counter
+    program_counter: usize,
     memory: [u8; 0x1000],
     stack: [u16; 16],
     stack_pointer: usize,
     index_register: u16,
     display: [[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
-    sound_timer: u8,
-    delay_timer:u8,
+    sound_timer: u8, //使わない
+    delay_timer: u8,
     key: Option<u8>,
+    keyboard: T,
 }
 
-impl Cpu {
-    fn new(file_path: &str) -> Cpu {
-
+impl<T: KeyboardInput> Cpu<T> {
+    fn new(file_path: &str, keyboard: T) -> Cpu<T> {
         let mut cpu = Cpu {
             registers: [0; 16],
-            position_in_memory: 0x200,
+            program_counter: 0x200,
             memory: [0; 0x1000],
             stack: [0; 16],
             stack_pointer: 0,
@@ -57,6 +57,7 @@ impl Cpu {
             sound_timer: 0,
             display: [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT],
             key: None,
+            keyboard,
         };
 
         let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
@@ -76,39 +77,10 @@ impl Cpu {
     }
 
     fn read_opcode(&self) -> u16 {
-        let p = self.position_in_memory;
+        let p = self.program_counter;
         let op_byte_1 = self.memory[p] as u16;
         let op_byte_2 = self.memory[p + 1] as u16;
         op_byte_1 << 8 | op_byte_2
-    }
-
-    fn key(&mut self, receiver: &mut mpsc::Receiver<u8>) -> Option<u8> {
-        receiver.try_recv().ok().or(self.key).map(|k| {
-            self.key = Some(k);
-            k
-        })
-    }
-
-    fn draw(&self) {
-        // カーソルを非表示にし、画面の一番上に移動
-        print!("\x1b[?25l\x1b[H");
-
-        // 描画用のバッファを準備
-        let mut buffer = String::with_capacity(DISPLAY_HEIGHT * (DISPLAY_WIDTH + 1));
-
-        for row in &self.display {
-            for &pixel in row {
-                buffer.push(if pixel { '#' } else { ' ' });
-            }
-            buffer.push('\n');
-        }
-
-        // バッファの内容を一度に出力
-        print!("{}", buffer);
-
-        // カーソルを表示し、画面をフラッシュ
-        print!("\x1b[?25h");
-        std::io::stdout().flush().unwrap();
     }
 
     fn decrement_timers(&mut self) {
@@ -121,23 +93,30 @@ impl Cpu {
         }
     }
 
-    fn update(&mut self, keyboard_receiver: &mut mpsc::Receiver<u8>) {
-        info!(
-            "v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x} key={:?}",
+    pub fn get_display(&self) -> &[[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT] {
+        &self.display
+    }
+
+    fn logging(&self, text: &str) {
+        debug!(
+            "{} v={:?} i={}({:x}) stack={:?} sp={:x} pc={}({:x}) dt={:x} key={:?}",
+            text,
             self.registers,
             self.index_register,
             self.index_register,
             self.stack,
             self.stack_pointer,
-            self.position_in_memory,
-            self.position_in_memory,
+            self.program_counter,
+            self.program_counter,
             self.delay_timer,
             self.key
         );
+    }
 
+    fn update(&mut self) {
         let opcode = self.read_opcode();
 
-        self.position_in_memory += 2;
+        self.program_counter += 2;
 
         let c = ((opcode & 0xF000) >> 12) as u8;
         let x = ((opcode & 0x0F00) >> 8) as u8;
@@ -146,9 +125,6 @@ impl Cpu {
 
         let nnn = opcode & 0x0FFF;
         let kk: u8 = (opcode & 0x00FF) as u8;
-
-        //opcode
-        info!("Executing opcode: {:04x}", opcode);
 
         match (c, x, y, d) {
             (0, 0, 0xE, 0) => {
@@ -224,16 +200,16 @@ impl Cpu {
                 self.drw_xy(x, y, d);
             }
             (0xE, _, 9, 0xE) => {
-                self.skp_vx(x, keyboard_receiver);
+                self.skp_vx(x);
             }
             (0xE, _, 0xA, 1) => {
-                self.sknp_vx(x, keyboard_receiver);
+                self.sknp_vx(x);
             }
             (0xF, _, 0, 7) => {
                 self.ld_vx_dt(x);
             }
             (0xF, _, 0, 0xA) => {
-                self.ld_vx_k(x, keyboard_receiver);
+                self.ld_vx_k(x);
             }
             (0xF, _, 1, 5) => {
                 self.ld_dt_vx(x);
@@ -264,32 +240,32 @@ impl Cpu {
     }
 
     fn sys_addr(&mut self, nnn: u16) {
-        info!("Executing function: sys_addr");
-        self.position_in_memory = nnn as usize;
+        self.logging(&format!("0nnn - SYS {}", nnn));
+        self.program_counter = nnn as usize;
     }
 
     fn cls(&mut self) {
-        info!("Executing function: cls");
+        self.logging("00E0 - CLS");
         self.display = [[false; DISPLAY_WIDTH]; DISPLAY_HEIGHT];
     }
 
     fn ret(&mut self) {
-        info!("Executing function: ret");
+        self.logging("00EE - RET");
         if self.stack_pointer == 0 {
             panic!("Stack underflow")
         }
 
         self.stack_pointer -= 1;
-        self.position_in_memory = self.stack[self.stack_pointer] as usize;
+        self.program_counter = self.stack[self.stack_pointer] as usize;
     }
 
     fn jp_addr(&mut self, nnn: u16) {
-        info!("Executing function: jp_addr :{}", nnn);
-        self.position_in_memory = nnn as usize;
+        self.logging(&format!("1nnn - JP {}", nnn));
+        self.program_counter = nnn as usize;
     }
 
     fn call(&mut self, nnn: u16) {
-        info!("Executing function: call nnn: {}", nnn);
+        self.logging(&format!("2nnn - CALL {}", nnn));
         let sp = self.stack_pointer;
         let stack = &mut self.stack;
 
@@ -297,69 +273,70 @@ impl Cpu {
             panic!("Stack overflow")
         }
 
-        stack[sp] = self.position_in_memory as u16;
+        stack[sp] = self.program_counter as u16;
         self.stack_pointer += 1;
-        self.position_in_memory = nnn as usize;
+        self.program_counter = nnn as usize;
     }
 
     fn se_byte(&mut self, x: u8, kk: u8) {
+        self.logging(&format!("3xkk - SE V{} KK:{}", x, kk));
         let vx = self.registers[x as usize];
-        info!("Executing function: se_byte x: {} vx: {} kk: {}", x, vx, kk);
         if vx == kk {
-            self.position_in_memory += 2;
+            self.program_counter += 2;
         }
     }
 
     fn sne_byte(&mut self, x: u8, kk: u8) {
-        info!("Executing function: sne_byte");
-        if self.registers[x as usize] != kk {
-            self.position_in_memory += 2;
+        self.logging(&format!("4xkk - SNE V{} KK:{}", x, kk));
+        let vx = self.registers[x as usize];
+        if vx != kk {
+            self.program_counter += 2;
         }
     }
 
     fn se_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: se_xy");
+        self.logging(&format!("5xy0 - SE V{} V{}", x, y));
         let vx = self.registers[x as usize];
         let vy = self.registers[y as usize];
 
         if vx == vy {
-            self.position_in_memory += 2;
+            self.program_counter += 2;
         }
     }
 
     fn ld_byte(&mut self, x: u8, kk: u8) {
-        info!("Executing function: ld_byte");
+        self.logging(&format!("6xkk - LD V{} KK:{}", x, kk));
         self.registers[x as usize] = kk;
     }
 
     fn add_byte(&mut self, x: u8, kk: u8) {
-        info!("Executing function: add_byte");
+        self.logging(&format!("7xkk - ADD V{} KK:{}", x, kk));
         let vx = self.registers[x as usize];
         self.registers[x as usize] = vx.overflowing_add(kk).0;
     }
 
     fn ld_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: ld_xy");
+        self.logging(&format!("8xy0 - LD V{} V{}", x, y));
         self.registers[x as usize] = self.registers[y as usize];
     }
 
     fn or_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: or_xy");
+        self.logging(&format!("8xy1 - OR V{} V{}", x, y));
         self.registers[x as usize] |= self.registers[y as usize];
     }
 
     fn and_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: and_xy");
+        self.logging(&format!("8xy2 - AND V{} V{}", x, y));
         self.registers[x as usize] &= self.registers[y as usize];
     }
 
     fn xor_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: xor_xy");
+        self.logging(&format!("8xy3 - XOR V{} V{}", x, y));
         self.registers[x as usize] ^= self.registers[y as usize];
     }
 
     fn add_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: add_xy");
+        self.logging(&format!("8xy4 - ADD V{} V{}", x, y));
         let vx = self.registers[x as usize] as u16;
         let vy = self.registers[y as usize] as u16;
 
@@ -372,7 +349,7 @@ impl Cpu {
     }
 
     fn sub_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: sub_xy");
+        self.logging(&format!("8xy5 - SUB V{} V{}", x, y));
         let vx = self.registers[x as usize];
         let vy = self.registers[y as usize];
 
@@ -386,7 +363,7 @@ impl Cpu {
     }
 
     fn shr_xy(&mut self, x: u8) {
-        info!("Executing function: shr_xy");
+        self.logging(&format!("8xy6 - SHR V{}", x));
         let vx = self.registers[x as usize];
         // 最下位ビットをVfにセット
         self.registers[0xF] = vx & 0x01;
@@ -395,7 +372,7 @@ impl Cpu {
     }
 
     fn subn_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: subn_xy");
+        self.logging(&format!("8xy7 - SUBN V{} V{}", x, y));
         let vx = self.registers[x as usize];
         let vy = self.registers[y as usize];
 
@@ -409,7 +386,7 @@ impl Cpu {
     }
 
     fn shl_xy(&mut self, x: u8) {
-        info!("Executing function: shl_xy");
+        self.logging(&format!("8xyE - SHL V{}", x));
         let vx = self.registers[x as usize];
         // 最上位ビット（7番目のビット）をVfにセット
         self.registers[0xF] = (vx & 0x80) >> 7;
@@ -418,30 +395,30 @@ impl Cpu {
     }
 
     fn sne_xy(&mut self, x: u8, y: u8) {
-        info!("Executing function: sne_xy");
+        self.logging(&format!("9xy0 - SNE V{} V{}", x, y));
         if self.registers[x as usize] != self.registers[y as usize] {
-            self.position_in_memory += 2;
+            self.program_counter += 2;
         }
     }
 
     fn ld_i_addr(&mut self, nnn: u16) {
-        info!("Executing function: ld_i_addr");
+        self.logging(&format!("Annn - LD I {}", nnn));
         self.index_register = nnn;
     }
 
     fn jp_v0_addr(&mut self, nnn: u16) {
-        info!("Executing function: jp_v0_addr");
-        self.position_in_memory = (self.registers[0] as u16 + nnn) as usize;
+        self.logging(&format!("Bnnn - JP V0 {}", nnn));
+        self.program_counter = (self.registers[0] as u16 + nnn) as usize;
     }
 
     fn rnd_byte(&mut self, x: u8, kk: u8) {
-        info!("Executing function: rnd_byte");
+        self.logging(&format!("Cxkk - RND V{} {}", x, kk));
         let random_number: u8 = random();
         self.registers[x as usize] = random_number & kk;
     }
 
     fn drw_xy(&mut self, x: u8, y: u8, n: u8) {
-        info!("Executing function: drw_xy");
+        self.logging(&format!("Dxyn - DRW V{} V{} {}", x, y, n));
         let vx = self.registers[x as usize] as usize;
         let vy = self.registers[y as usize] as usize;
 
@@ -462,74 +439,70 @@ impl Cpu {
         }
     }
 
-    fn skp_vx(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
+    fn skp_vx(&mut self, x: u8) {
+        self.logging(&format!("Ex9E - SKP V{}", x));
         let vx = self.registers[x as usize];
-        if let Some(key) = self.key(keyboard_receiver) {
+        if let Some(key) = self.keyboard.get_key() {
             if key == vx {
-                self.position_in_memory += 2;
+                self.program_counter += 2;
                 self.key = None;
             }
         }
     }
 
-    fn sknp_vx(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
+    fn sknp_vx(&mut self, x: u8) {
+        self.logging(&format!("ExA1 - SKNP V{}", x));
         let vx = self.registers[x as usize];
-        info!("Executing function: sknp_vx x: {} vx: {}", x, vx);
-        if let Some(key) = self.key(keyboard_receiver) {
+        if let Some(key) = self.keyboard.get_key() {
             if key != vx {
-                self.position_in_memory += 2;
+                self.program_counter += 2;
                 self.key = None;
             }
         }
     }
 
     fn ld_vx_dt(&mut self, x: u8) {
-        let vx = self.registers[x as usize];
-        info!("Executing function: ld_vx_dt x: {} vx: {}", x, vx);
+        self.logging(&format!("Fx07 - LD V{} DT", x));
         self.registers[x as usize] = self.delay_timer;
     }
 
-    fn ld_vx_k(&mut self, x: u8, keyboard_receiver: &mut mpsc::Receiver<u8>) {
-        info!("Executing function: ld_vx_k");
+    fn ld_vx_k(&mut self, x: u8) {
+        self.logging(&format!("Fx0A - LD V{} K", x));
         let mut pressed = false;
 
-        if let Some(key) = self.key(keyboard_receiver) {
+        if let Some(key) = self.keyboard.get_key() {
             self.registers[x as usize] = key;
             pressed = true;
         }
 
         if !pressed {
-            self.position_in_memory -= 2; //キーが押されるまで待つ
+            self.program_counter -= 2; //キーが押されるまで待つ
         }
     }
 
     fn ld_dt_vx(&mut self, x: u8) {
-        info!(
-            "Executing function: ld_dt_vx x: {} vx: {}",
-            x, self.registers[x as usize]
-        );
-       
+        self.logging(&format!("Fx15 - LD DT V{}", x));
         self.delay_timer = self.registers[x as usize];
     }
 
     fn ld_st_vx(&mut self, x: u8) {
-        info!("Executing function: ld_st_vx");
+        self.logging(&format!("Fx18 - LD ST V{}", x));
         self.sound_timer = self.registers[x as usize];
     }
 
     fn add_i_vx(&mut self, x: u8) {
-        info!("Executing function: add_i_vx");
+        self.logging(&format!("Fx1E - ADD I V{}", x));
         let vx = self.registers[x as usize];
         self.index_register += vx as u16;
     }
 
     fn ld_f_vx(&mut self, x: u8) {
-        info!("Executing function: ld_f_vx");
+        self.logging(&format!("Fx29 - LD F V{}", x));
         self.index_register = self.registers[x as usize] as u16 * 5;
     }
 
     fn ld_b_vx(&mut self, x: u8) {
-        info!("Executing function: ld_b_vx");
+        self.logging(&format!("Fx33 - LD B V{}", x));
         let vx = self.registers[x as usize];
         self.memory[self.index_register as usize] = (vx / 100) % 10;
         self.memory[self.index_register as usize + 1] = (vx / 10) % 10;
@@ -537,77 +510,122 @@ impl Cpu {
     }
 
     fn ld_i_vx(&mut self, x: u8) {
-        info!("Executing function: ld_i_vx");
+        self.logging(&format!("Fx55 - LD [I] V{}", x));
         for i in 0..=x {
             self.memory[self.index_register as usize + i as usize] = self.registers[i as usize];
         }
     }
 
     fn ld_vx_i(&mut self, x: u8) {
-        info!("Executing function: ld_vx_i");
+        self.logging(&format!("Fx65 - LD V{} [I]", x));
         for i in 0..=x {
             self.registers[i as usize] = self.memory[self.index_register as usize + i as usize];
         }
     }
+}
 
-    fn start(&mut self) {
-        let (keyboard_sender, mut keyboard_receiver) = mpsc::channel();
+fn start<D: Draw, T: KeyboardInput>(mut cpu: Cpu<T>, drawer: D) {
+    loop {
+        for _ in 0..10 {
+            cpu.update();
+        }
+        cpu.decrement_timers();
+        drawer.draw(cpu.get_display());
+    }
+}
+trait Draw {
+    fn draw(&self, display: &[[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT]);
+}
 
+struct CUIDraw;
+
+impl Draw for CUIDraw {
+    fn draw(&self, display: &[[bool; DISPLAY_WIDTH]; DISPLAY_HEIGHT]) {
+        // カーソルを非表示にし、画面の一番上に移動
+        print!("\x1b[?25l\x1b[H");
+
+        // 描画用のバッファを準備
+        let mut buffer = String::with_capacity(DISPLAY_HEIGHT * (DISPLAY_WIDTH + 1));
+
+        for row in display {
+            for &pixel in row {
+                buffer.push(if pixel { '#' } else { ' ' });
+            }
+            buffer.push('\n');
+        }
+
+        // バッファの内容を一度に出力
+        print!("{}", buffer);
+
+        // カーソルを表示し、画面をフラッシュ
+        print!("\x1b[?25h");
+        std::io::stdout().flush().unwrap();
+    }
+}
+
+trait KeyboardInput {
+    fn start_keyboard_thread(sender: mpsc::Sender<u8>);
+    fn get_key(&self) -> Option<u8>;
+}
+
+struct GetchKeyboard {
+    receiver: mpsc::Receiver<u8>,
+}
+
+impl GetchKeyboard {
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::channel::<u8>();
+        Self::start_keyboard_thread(sender);
+        GetchKeyboard { receiver }
+    }
+}
+
+impl KeyboardInput for GetchKeyboard {
+    fn start_keyboard_thread(sender: mpsc::Sender<u8>) {
         thread::spawn(move || {
             let g = Getch::new();
             loop {
                 match g.getch() {
-                    Ok(Key::Char('1')) => keyboard_sender.send(0x1).unwrap(),
-                    Ok(Key::Char('2')) => keyboard_sender.send(0x2).unwrap(),
-                    Ok(Key::Char('3')) => keyboard_sender.send(0x3).unwrap(),
-                    Ok(Key::Char('4')) => keyboard_sender.send(0xC).unwrap(),
-                    Ok(Key::Char('q')) => keyboard_sender.send(0x4).unwrap(),
-                    Ok(Key::Char('w')) => keyboard_sender.send(0x5).unwrap(),
-                    Ok(Key::Char('e')) => keyboard_sender.send(0x6).unwrap(),
-                    Ok(Key::Char('r')) => keyboard_sender.send(0xD).unwrap(),
-                    Ok(Key::Char('a')) => keyboard_sender.send(0x7).unwrap(),
-                    Ok(Key::Char('s')) => keyboard_sender.send(0x8).unwrap(),
-                    Ok(Key::Char('d')) => keyboard_sender.send(0x9).unwrap(),
-                    Ok(Key::Char('f')) => keyboard_sender.send(0xE).unwrap(),
-                    Ok(Key::Char('z')) => keyboard_sender.send(0xA).unwrap(),
-                    Ok(Key::Char('x')) => keyboard_sender.send(0x0).unwrap(),
-                    Ok(Key::Char('c')) => keyboard_sender.send(0xB).unwrap(),
-                    Ok(Key::Char('v')) => keyboard_sender.send(0xF).unwrap(),
+                    Ok(Key::Char('1')) => sender.send(0x1).unwrap(),
+                    Ok(Key::Char('2')) => sender.send(0x2).unwrap(),
+                    Ok(Key::Char('3')) => sender.send(0x3).unwrap(),
+                    Ok(Key::Char('4')) => sender.send(0xC).unwrap(),
+                    Ok(Key::Char('q')) => sender.send(0x4).unwrap(),
+                    Ok(Key::Char('w')) => sender.send(0x5).unwrap(),
+                    Ok(Key::Char('e')) => sender.send(0x6).unwrap(),
+                    Ok(Key::Char('r')) => sender.send(0xD).unwrap(),
+                    Ok(Key::Char('a')) => sender.send(0x7).unwrap(),
+                    Ok(Key::Char('s')) => sender.send(0x8).unwrap(),
+                    Ok(Key::Char('d')) => sender.send(0x9).unwrap(),
+                    Ok(Key::Char('f')) => sender.send(0xE).unwrap(),
+                    Ok(Key::Char('z')) => sender.send(0xA).unwrap(),
+                    Ok(Key::Char('x')) => sender.send(0x0).unwrap(),
+                    Ok(Key::Char('c')) => sender.send(0xB).unwrap(),
+                    Ok(Key::Char('v')) => sender.send(0xF).unwrap(),
                     Ok(Key::Esc) => std::process::exit(0),
                     _ => {}
                 }
             }
         });
+    }
 
-        loop {
-            for _ in 0..10 {
-            self.update(&mut keyboard_receiver);
-            }
-            self.decrement_timers();
-            self.draw();
-            
-        }
+    fn get_key(&self) -> Option<u8> {
+        self.receiver.try_recv().ok()
     }
 }
 
 fn main() {
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Warn,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        ),
-        WriteLogger::new(
-            LevelFilter::Info,
-            Config::default(),
-            File::create("chip8.log").unwrap(),
-        ),
-    ])
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        File::create("chip8.log").unwrap(),
+    )])
     .unwrap();
 
-    info!("Starting the emulator");
-    let mut cpu = Cpu::new("rom/BRIX");
+    debug!("Starting the emulator");
+    let keyboard = GetchKeyboard::new();
+    let cpu = Cpu::new("rom/BRIX", keyboard);
 
-    cpu.start();
+    let drawer = CUIDraw;
+    start(cpu, drawer);
 }
