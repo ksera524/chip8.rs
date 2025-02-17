@@ -518,3 +518,61 @@ impl<T: KeyboardInput> Cpu<T> {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    // テスト用のモックキーボード構造体
+    struct MockKeyboard {
+        key: Option<u8>,
+    }
+
+    impl KeyboardInput for MockKeyboard {
+        fn start_keyboard_thread(_sender: mpsc::Sender<u8>) {
+            // テストでは何もしない
+        }
+
+        fn get_key(&self) -> Option<u8> {
+            self.key
+        }
+    }
+
+    fn setup_cpu() -> Cpu<MockKeyboard> {
+        // テスト用の空ファイルを作成
+        let temp_path = "test.ch8";
+        std::fs::write(temp_path, vec![0; 10]).expect("Failed to create test file");
+        
+        let keyboard = MockKeyboard { key: None };
+        let cpu = Cpu::new(temp_path, keyboard);
+        
+        std::fs::remove_file(temp_path).expect("Failed to remove test file");
+        cpu
+    }
+
+    #[test]
+    fn test_add_xy() {
+        let mut cpu = setup_cpu();
+        
+        // ケース1: 通常の加算（オーバーフローなし）
+        cpu.registers[0] = 0x10;  // 16
+        cpu.registers[1] = 0x20;  // 32
+        cpu.add_xy(0, 1);
+        assert_eq!(cpu.registers[0], 0x30);  // 48
+        assert_eq!(cpu.registers[0xF], 0);   // キャリーフラグはセットされない
+
+        // ケース2: オーバーフローする加算
+        cpu.registers[0] = 0xFF;  // 255
+        cpu.registers[1] = 0x02;  // 2
+        cpu.add_xy(0, 1);
+        assert_eq!(cpu.registers[0], 0x01);  // 257 % 256 = 1
+        assert_eq!(cpu.registers[0xF], 1);   // キャリーフラグがセットされる
+
+        // ケース3: ちょうど256になる加算
+        cpu.registers[0] = 0xFE;  // 254
+        cpu.registers[1] = 0x02;  // 2
+        cpu.add_xy(0, 1);
+        assert_eq!(cpu.registers[0], 0x00);  // 256 % 256 = 0
+        assert_eq!(cpu.registers[0xF], 1);   // キャリーフラグがセットされる
+    }
+}
