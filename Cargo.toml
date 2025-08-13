@@ -10,3 +10,7 @@ getch-rs = "0.1.4"
 log = "0.4.20"
 rand = "0.8.4"
 simplelog = "0.12.1"
+
+
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
