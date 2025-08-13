@@ -8,12 +8,36 @@ use getch_rs::{Getch, Key};
 use keyboard::{GetchKeyboard, KeyboardInput};
 use simplelog::*;
 use std::fs::File;
+use std::time::{Duration, Instant};
 
 fn start<T: KeyboardInput, D: Draw>(mut cpu: Cpu<T>, drawer: D) {
+    const CPU_FREQUENCY: u64 = 600; // 600命令/秒
+    const TIMER_FREQUENCY: u64 = 60; // 60Hz固定
+    
+    let cpu_interval = Duration::from_nanos(1_000_000_000 / CPU_FREQUENCY);
+    let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_FREQUENCY);
+    
+    let mut last_cpu_time = Instant::now();
+    let mut last_timer_time = Instant::now();
+    
     loop {
-        cpu.update();
-        cpu.decrement_timers();
-        drawer.draw(cpu.get_display());
+        let now = Instant::now();
+        
+        // CPU命令実行（600Hz）
+        if now.duration_since(last_cpu_time) >= cpu_interval {
+            cpu.update();
+            drawer.draw(cpu.get_display());
+            last_cpu_time = now;
+        }
+        
+        // タイマー減算（60Hz）
+        if now.duration_since(last_timer_time) >= timer_interval {
+            cpu.decrement_timers();
+            last_timer_time = now;
+        }
+        
+        // CPU使用率を下げるため短時間スリープ
+        std::thread::sleep(Duration::from_micros(100));
     }
 }
 
