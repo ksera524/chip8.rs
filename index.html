@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHIP-8 エミュレータ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #4CAF50;
+        }
+        
+        #gameCanvas {
+            border: 2px solid #4CAF50;
+            background-color: black;
+            margin: 20px 0;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .game-selection, .game-controls {
+            margin: 10px 0;
+        }
+        
+        .game-status {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .keymap {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            max-width: 300px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        
+        .key {
+            background-color: #333;
+            padding: 10px;
+            text-align: center;
+            border-radius: 4px;
+            border: 1px solid #666;
+        }
+        
+        .instructions {
+            max-width: 600px;
+            text-align: center;
+            margin: 20px 0;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>CHIP-8 エミュレータ</h1>
+    
+    <canvas id="gameCanvas" width="640" height="320"></canvas>
+    
+    <div class="controls">
+        <div class="game-selection">
+            <button onclick="loadGame('brix')">BRIX (ブロック崩し)</button>
+            <button onclick="loadGame('invaders')">INVADERS (インベーダー)</button>
+            <button onclick="loadGame('guess')">GUESS (数当てゲーム)</button>
+        </div>
+        <div class="game-controls">
+            <button onclick="resetGame()" id="resetBtn" style="display: none;">🔄 ゲームリセット</button>
+            <button onclick="stopGame()" id="stopBtn" style="display: none;">⏹️ ゲーム停止</button>
+        </div>
+        <div id="gameStatus" class="game-status">ゲームを選択してください</div>
+    </div>
+    
+    <div class="instructions">
+        <h3>操作方法</h3>
+        <p>キーボードの以下のキーでゲームを操作してください：</p>
+    </div>
+    
+    <div class="keymap">
+        <div class="key">1</div>
+        <div class="key">2</div>
+        <div class="key">3</div>
+        <div class="key">4</div>
+        <div class="key">Q</div>
+        <div class="key">W</div>
+        <div class="key">E</div>
+        <div class="key">R</div>
+        <div class="key">A</div>
+        <div class="key">S</div>
+        <div class="key">D</div>
+        <div class="key">F</div>
+        <div class="key">Z</div>
+        <div class="key">X</div>
+        <div class="key">C</div>
+        <div class="key">V</div>
+    </div>
+    
+    <div class="instructions">
+        <h3>ゲーム説明と操作方法</h3>
+        
+        <h4>🧱 BRIX（ブロック崩し）</h4>
+        <p>パドルでボールを跳ね返してブロックを全て破壊しよう！</p>
+        <ul>
+            <li><strong>Q</strong>: パドルを左に移動</li>
+            <li><strong>E</strong>: パドルを右に移動</li>
+        </ul>
+        
+        <h4>👾 INVADERS（スペースインベーダー）</h4>
+        <p>宇宙からの侵略者を撃退するシューティングゲーム！</p>
+        <ul>
+            <li><strong>Q</strong>: 宇宙船を左に移動</li>
+            <li><strong>E</strong>: 宇宙船を右に移動</li>
+            <li><strong>W</strong>: レーザー砲を発射</li>
+        </ul>
+        
+        <h4>🔢 GUESS（数当てゲーム）</h4>
+        <p>コンピューターが考えた数字（0-15）を当てるゲーム！</p>
+        <ul>
+            <li><strong>1-9</strong>: 数字をそのまま入力</li>
+            <li><strong>Z</strong>: A (10)</li>
+            <li><strong>C</strong>: B (11)</li>
+            <li><strong>4</strong>: C (12)</li>
+            <li><strong>R</strong>: D (13)</li>
+            <li><strong>F</strong>: E (14)</li>
+            <li><strong>V</strong>: F (15)</li>
+        </ul>
+    </div>
+
+    <script type="module">
+        import init, { init_wasm, load_brix, load_invaders, load_guess, game_loop, reset_current_game, stop_game, is_game_running } from './pkg/chip8.js';
+        
+        let gameRunning = false;
+        let animationId;
+        let currentGame = null;
+        
+        async function initWasm() {
+            try {
+                await init();
+                await init_wasm(); // ログ初期化を分離
+                console.log('WASM initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize WASM:', error);
+            }
+        }
+        
+        function startGameLoop() {
+            if (gameRunning) return;
+            gameRunning = true;
+            
+            function loop() {
+                if (gameRunning) {
+                    game_loop();
+                    animationId = requestAnimationFrame(loop);
+                }
+            }
+            loop();
+        }
+        
+        function stopGameLoop() {
+            gameRunning = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+        }
+        
+        function updateUI() {
+            const resetBtn = document.getElementById('resetBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const gameStatus = document.getElementById('gameStatus');
+            
+            if (currentGame) {
+                resetBtn.style.display = 'inline-block';
+                stopBtn.style.display = 'inline-block';
+                gameStatus.textContent = `実行中: ${currentGame.toUpperCase()}`;
+                gameStatus.style.color = '#4CAF50';
+            } else {
+                resetBtn.style.display = 'none';
+                stopBtn.style.display = 'none';
+                gameStatus.textContent = 'ゲームを選択してください';
+                gameStatus.style.color = '#4CAF50';
+            }
+        }
+        
+        // グローバル関数を先に定義
+        window.loadGame = async function(gameName) {
+            try {
+                stopGameLoop();
+                
+                switch(gameName) {
+                    case 'brix':
+                        await load_brix('gameCanvas');
+                        break;
+                    case 'invaders':
+                        await load_invaders('gameCanvas');
+                        break;
+                    case 'guess':
+                        await load_guess('gameCanvas');
+                        break;
+                    default:
+                        console.error('Unknown game:', gameName);
+                        return;
+                }
+                
+                currentGame = gameName;
+                startGameLoop();
+                updateUI();
+                console.log(`${gameName} loaded successfully`);
+            } catch (error) {
+                console.error(`Failed to load ${gameName}:`, error);
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement) {
+                    statusElement.textContent = `エラー: ${gameName}の読み込みに失敗`;
+                    statusElement.style.color = '#ff4444';
+                }
+            }
+        };
+        
+        window.resetGame = async function() {
+            try {
+                await reset_current_game();
+                console.log('Game reset successfully');
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement && currentGame) {
+                    statusElement.textContent = `リセット完了: ${currentGame.toUpperCase()}`;
+                }
+            } catch (error) {
+                console.error('Failed to reset game:', error);
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement) {
+                    statusElement.textContent = 'リセットに失敗しました';
+                    statusElement.style.color = '#ff4444';
+                }
+            }
+        };
+        
+        window.stopGame = function() {
+            try {
+                stopGameLoop();
+                stop_game();
+                currentGame = null;
+                updateUI();
+                console.log('Game stopped');
+            } catch (error) {
+                console.error('Failed to stop game:', error);
+            }
+        };
+        
+        // DOMとWASMの初期化を確実に行う
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await initWasm();
+                updateUI();
+                
+                // デバッグ: 関数が正しく定義されているか確認
+                console.log('loadGame defined:', typeof window.loadGame);
+                console.log('resetGame defined:', typeof window.resetGame);
+                console.log('stopGame defined:', typeof window.stopGame);
+                console.log('All functions loaded and ready');
+            } catch (error) {
+                console.error('Failed to initialize:', error);
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement) {
+                    statusElement.textContent = '初期化に失敗しました';
+                    statusElement.style.color = '#ff4444';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

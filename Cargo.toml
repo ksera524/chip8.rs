@@ -3,14 +3,44 @@ name = "chip8"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "desktop"
+path = "src/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-getch-rs = "0.1.4"
 log = "0.4.20"
 rand = "0.8.4"
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+console_log = "1.0"
+console_error_panic_hook = "0.1"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "console",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "CanvasRenderingContext2d",
+  "Window",
+  "KeyboardEvent",
+  "EventTarget",
+]
+
+# デスクトップ版でのみ使用
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getch-rs = "0.1.4"
 simplelog = "0.12.1"
 
+[dependencies.getrandom]
+version = "0.2"
+features = ["js"]
 
-[target.'cfg(target_os = "linux")']
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+

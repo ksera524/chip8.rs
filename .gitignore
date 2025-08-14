@@ -14,3 +14,6 @@ Cargo.lock
 *.pdb
 
 *.log
+
+# CLAUDE.md is for Claude Code instances only
+CLAUDE.md
