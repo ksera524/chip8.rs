@@ -192,6 +192,7 @@
             }
         }
         
+        // グローバル関数を先に定義
         window.loadGame = async function(gameName) {
             try {
                 stopGameLoop();
@@ -217,8 +218,11 @@
                 console.log(`${gameName} loaded successfully`);
             } catch (error) {
                 console.error(`Failed to load ${gameName}:`, error);
-                document.getElementById('gameStatus').textContent = `エラー: ${gameName}の読み込みに失敗`;
-                document.getElementById('gameStatus').style.color = '#ff4444';
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement) {
+                    statusElement.textContent = `エラー: ${gameName}の読み込みに失敗`;
+                    statusElement.style.color = '#ff4444';
+                }
             }
         };
         
@@ -226,11 +230,17 @@
             try {
                 await reset_current_game();
                 console.log('Game reset successfully');
-                document.getElementById('gameStatus').textContent = `リセット完了: ${currentGame.toUpperCase()}`;
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement && currentGame) {
+                    statusElement.textContent = `リセット完了: ${currentGame.toUpperCase()}`;
+                }
             } catch (error) {
                 console.error('Failed to reset game:', error);
-                document.getElementById('gameStatus').textContent = 'リセットに失敗しました';
-                document.getElementById('gameStatus').style.color = '#ff4444';
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement) {
+                    statusElement.textContent = 'リセットに失敗しました';
+                    statusElement.style.color = '#ff4444';
+                }
             }
         };
         
@@ -246,9 +256,25 @@
             }
         };
         
-        // 初期化
-        initWasm().then(() => {
-            updateUI();
+        // DOMとWASMの初期化を確実に行う
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await initWasm();
+                updateUI();
+                
+                // デバッグ: 関数が正しく定義されているか確認
+                console.log('loadGame defined:', typeof window.loadGame);
+                console.log('resetGame defined:', typeof window.resetGame);
+                console.log('stopGame defined:', typeof window.stopGame);
+                console.log('All functions loaded and ready');
+            } catch (error) {
+                console.error('Failed to initialize:', error);
+                const statusElement = document.getElementById('gameStatus');
+                if (statusElement) {
+                    statusElement.textContent = '初期化に失敗しました';
+                    statusElement.style.color = '#ff4444';
+                }
+            }
         });
     </script>
 </body>
