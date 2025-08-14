@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHIP-8 エミュレータ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #4CAF50;
+        }
+        
+        #gameCanvas {
+            border: 2px solid #4CAF50;
+            background-color: black;
+            margin: 20px 0;
+        }
+        
+        .controls {
+            margin: 20px 0;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .keymap {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            max-width: 300px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        
+        .key {
+            background-color: #333;
+            padding: 10px;
+            text-align: center;
+            border-radius: 4px;
+            border: 1px solid #666;
+        }
+        
+        .instructions {
+            max-width: 600px;
+            text-align: center;
+            margin: 20px 0;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>CHIP-8 エミュレータ</h1>
+    
+    <canvas id="gameCanvas" width="640" height="320"></canvas>
+    
+    <div class="controls">
+        <button onclick="loadGame('brix')">BRIX (ブロック崩し)</button>
+        <button onclick="loadGame('invaders')">INVADERS (インベーダー)</button>
+        <button onclick="loadGame('guess')">GUESS (数当てゲーム)</button>
+    </div>
+    
+    <div class="instructions">
+        <h3>操作方法</h3>
+        <p>キーボードの以下のキーでゲームを操作してください：</p>
+    </div>
+    
+    <div class="keymap">
+        <div class="key">1</div>
+        <div class="key">2</div>
+        <div class="key">3</div>
+        <div class="key">4</div>
+        <div class="key">Q</div>
+        <div class="key">W</div>
+        <div class="key">E</div>
+        <div class="key">R</div>
+        <div class="key">A</div>
+        <div class="key">S</div>
+        <div class="key">D</div>
+        <div class="key">F</div>
+        <div class="key">Z</div>
+        <div class="key">X</div>
+        <div class="key">C</div>
+        <div class="key">V</div>
+    </div>
+    
+    <div class="instructions">
+        <h3>ゲーム説明</h3>
+        <ul>
+            <li><strong>BRIX</strong>: ブロック崩しゲーム。Q/Eキーでパドルを移動。</li>
+            <li><strong>INVADERS</strong>: スペースインベーダー風シューティングゲーム。</li>
+            <li><strong>GUESS</strong>: 数当てゲーム。</li>
+        </ul>
+    </div>
+
+    <script type="module">
+        import init, { load_brix, load_invaders, load_guess, game_loop } from './pkg/chip8.js';
+        
+        let gameRunning = false;
+        let animationId;
+        
+        async function initWasm() {
+            try {
+                await init();
+                console.log('WASM initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize WASM:', error);
+            }
+        }
+        
+        function startGameLoop() {
+            if (gameRunning) return;
+            gameRunning = true;
+            
+            function loop() {
+                if (gameRunning) {
+                    game_loop();
+                    animationId = requestAnimationFrame(loop);
+                }
+            }
+            loop();
+        }
+        
+        function stopGameLoop() {
+            gameRunning = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+        }
+        
+        window.loadGame = async function(gameName) {
+            try {
+                stopGameLoop();
+                
+                switch(gameName) {
+                    case 'brix':
+                        await load_brix('gameCanvas');
+                        break;
+                    case 'invaders':
+                        await load_invaders('gameCanvas');
+                        break;
+                    case 'guess':
+                        await load_guess('gameCanvas');
+                        break;
+                    default:
+                        console.error('Unknown game:', gameName);
+                        return;
+                }
+                
+                startGameLoop();
+                console.log(`${gameName} loaded successfully`);
+            } catch (error) {
+                console.error(`Failed to load ${gameName}:`, error);
+            }
+        };
+        
+        // 初期化
+        initWasm();
+    </script>
+</body>
+</html>

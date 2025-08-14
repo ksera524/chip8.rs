@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use getch_rs::{Getch, Key};
 use std::{sync::mpsc, thread};
 
@@ -6,10 +7,12 @@ pub trait KeyboardInput {
     fn get_key(&self) -> Option<u8>;
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct GetchKeyboard {
     receiver: mpsc::Receiver<u8>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl GetchKeyboard {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel::<u8>();
@@ -18,6 +21,7 @@ impl GetchKeyboard {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl KeyboardInput for GetchKeyboard {
     fn start_keyboard_thread(sender: mpsc::Sender<u8>) {
         thread::spawn(move || {

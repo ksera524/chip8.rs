@@ -1,15 +1,26 @@
+#[cfg(not(target_arch = "wasm32"))]
 mod chip8;
+#[cfg(not(target_arch = "wasm32"))]
 mod display;
+#[cfg(not(target_arch = "wasm32"))]
 mod keyboard;
 
+#[cfg(not(target_arch = "wasm32"))]
 use chip8::Cpu;
+#[cfg(not(target_arch = "wasm32"))]
 use display::{CUIDraw, Draw};
+#[cfg(not(target_arch = "wasm32"))]
 use getch_rs::{Getch, Key};
+#[cfg(not(target_arch = "wasm32"))]
 use keyboard::{GetchKeyboard, KeyboardInput};
+#[cfg(not(target_arch = "wasm32"))]
 use simplelog::*;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs::File;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_arch = "wasm32"))]
 fn start<T: KeyboardInput, D: Draw>(mut cpu: Cpu<T>, drawer: D) {
     const CPU_FREQUENCY: u64 = 600; // 600命令/秒
     const TIMER_FREQUENCY: u64 = 60; // 60Hz固定
@@ -41,6 +52,7 @@ fn start<T: KeyboardInput, D: Draw>(mut cpu: Cpu<T>, drawer: D) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     CombinedLogger::init(vec![WriteLogger::new(
         LevelFilter::Debug,

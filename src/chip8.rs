@@ -41,6 +41,15 @@ pub struct Cpu<T: KeyboardInput> {
 
 impl<T: KeyboardInput> Cpu<T> {
     pub fn new(file_path: &str, keyboard: T) -> Cpu<T> {
+        let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
+        let mut buffer: Vec<u8> = Vec::new();
+        file.read_to_end(&mut buffer)
+            .expect("Failed to read the file");
+
+        Self::from_bytes(&buffer, keyboard)
+    }
+
+    pub fn from_bytes(rom_data: &[u8], keyboard: T) -> Cpu<T> {
         let mut cpu = Cpu {
             registers: [0; 16],
             program_counter: 0x200,
@@ -55,16 +64,11 @@ impl<T: KeyboardInput> Cpu<T> {
             keyboard,
         };
 
-        let mut file = File::open(Path::new(file_path)).expect("Failed to open the file");
-        let mut buffer: Vec<u8> = Vec::new();
-        file.read_to_end(&mut buffer)
-            .expect("Failed to read the file");
-
         for (i, byte) in FONTSET.iter().enumerate() {
             cpu.memory[i] = *byte;
         }
 
-        for (i, byte) in buffer.iter().enumerate() {
+        for (i, byte) in rom_data.iter().enumerate() {
             cpu.memory[0x200 + i] = *byte;
         }
 
