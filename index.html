@@ -138,7 +138,7 @@
     </div>
 
     <script type="module">
-        import init, { load_brix, load_invaders, load_guess, game_loop, reset_current_game, stop_game, is_game_running } from './pkg/chip8.js';
+        import init, { init_wasm, load_brix, load_invaders, load_guess, game_loop, reset_current_game, stop_game, is_game_running } from './pkg/chip8.js';
         
         let gameRunning = false;
         let animationId;
@@ -147,6 +147,7 @@
         async function initWasm() {
             try {
                 await init();
+                await init_wasm(); // ログ初期化を分離
                 console.log('WASM initialized successfully');
             } catch (error) {
                 console.error('Failed to initialize WASM:', error);

@@ -33,14 +33,28 @@ thread_local! {
     static GAME_STATE: RefCell<Option<GameState>> = RefCell::new(None);
 }
 
+// ログ初期化の状態を管理
+thread_local! {
+    static LOGGER_INITIALIZED: RefCell<bool> = RefCell::new(false);
+}
+
 #[wasm_bindgen]
-pub fn init_game(canvas_id: &str, rom_data: &[u8]) -> Result<(), JsValue> {
+pub fn init_wasm() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     
-    // ロガーを初期化
-    console_log::init_with_level(log::Level::Debug)
-        .map_err(|e| JsValue::from_str(&format!("Failed to init logger: {:?}", e)))?;
-    
+    // ロガーを一度だけ初期化
+    LOGGER_INITIALIZED.with(|initialized| {
+        if !*initialized.borrow() {
+            console_log::init_with_level(log::Level::Debug)
+                .map_err(|e| JsValue::from_str(&format!("Failed to init logger: {:?}", e)))?;
+            *initialized.borrow_mut() = true;
+        }
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
+pub fn init_game(canvas_id: &str, rom_data: &[u8]) -> Result<(), JsValue> {
     log!("Initializing CHIP-8 emulator");
     
     let keyboard = WebKeyboard::new();
