@@ -27,6 +27,20 @@
         
         .controls {
             margin: 20px 0;
+            text-align: center;
+        }
+        
+        .game-selection, .game-controls {
+            margin: 10px 0;
+        }
+        
+        .game-status {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #4CAF50;
         }
         
         button {
@@ -78,9 +92,16 @@
     <canvas id="gameCanvas" width="640" height="320"></canvas>
     
     <div class="controls">
-        <button onclick="loadGame('brix')">BRIX (ブロック崩し)</button>
-        <button onclick="loadGame('invaders')">INVADERS (インベーダー)</button>
-        <button onclick="loadGame('guess')">GUESS (数当てゲーム)</button>
+        <div class="game-selection">
+            <button onclick="loadGame('brix')">BRIX (ブロック崩し)</button>
+            <button onclick="loadGame('invaders')">INVADERS (インベーダー)</button>
+            <button onclick="loadGame('guess')">GUESS (数当てゲーム)</button>
+        </div>
+        <div class="game-controls">
+            <button onclick="resetGame()" id="resetBtn" style="display: none;">🔄 ゲームリセット</button>
+            <button onclick="stopGame()" id="stopBtn" style="display: none;">⏹️ ゲーム停止</button>
+        </div>
+        <div id="gameStatus" class="game-status">ゲームを選択してください</div>
     </div>
     
     <div class="instructions">
@@ -117,10 +138,11 @@
     </div>
 
     <script type="module">
-        import init, { load_brix, load_invaders, load_guess, game_loop } from './pkg/chip8.js';
+        import init, { load_brix, load_invaders, load_guess, game_loop, reset_current_game, stop_game, is_game_running } from './pkg/chip8.js';
         
         let gameRunning = false;
         let animationId;
+        let currentGame = null;
         
         async function initWasm() {
             try {
@@ -151,6 +173,24 @@
             }
         }
         
+        function updateUI() {
+            const resetBtn = document.getElementById('resetBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const gameStatus = document.getElementById('gameStatus');
+            
+            if (currentGame) {
+                resetBtn.style.display = 'inline-block';
+                stopBtn.style.display = 'inline-block';
+                gameStatus.textContent = `実行中: ${currentGame.toUpperCase()}`;
+                gameStatus.style.color = '#4CAF50';
+            } else {
+                resetBtn.style.display = 'none';
+                stopBtn.style.display = 'none';
+                gameStatus.textContent = 'ゲームを選択してください';
+                gameStatus.style.color = '#4CAF50';
+            }
+        }
+        
         window.loadGame = async function(gameName) {
             try {
                 stopGameLoop();
@@ -170,15 +210,45 @@
                         return;
                 }
                 
+                currentGame = gameName;
                 startGameLoop();
+                updateUI();
                 console.log(`${gameName} loaded successfully`);
             } catch (error) {
                 console.error(`Failed to load ${gameName}:`, error);
+                document.getElementById('gameStatus').textContent = `エラー: ${gameName}の読み込みに失敗`;
+                document.getElementById('gameStatus').style.color = '#ff4444';
+            }
+        };
+        
+        window.resetGame = async function() {
+            try {
+                await reset_current_game();
+                console.log('Game reset successfully');
+                document.getElementById('gameStatus').textContent = `リセット完了: ${currentGame.toUpperCase()}`;
+            } catch (error) {
+                console.error('Failed to reset game:', error);
+                document.getElementById('gameStatus').textContent = 'リセットに失敗しました';
+                document.getElementById('gameStatus').style.color = '#ff4444';
+            }
+        };
+        
+        window.stopGame = function() {
+            try {
+                stopGameLoop();
+                stop_game();
+                currentGame = null;
+                updateUI();
+                console.log('Game stopped');
+            } catch (error) {
+                console.error('Failed to stop game:', error);
             }
         };
         
         // 初期化
-        initWasm();
+        initWasm().then(() => {
+            updateUI();
+        });
     </script>
 </body>
 </html>
